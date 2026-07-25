@@ -1,0 +1,19 @@
+{
+  "id": "terraria",
+  "name": "泰拉瑞亚 Terraria",
+  "description": "Terraria 原版专用服务器。世界文件存于 ~/.local/share/Terraria/Worlds（实例目录之外）。",
+  "steam_app_id": 105600,
+  "anonymous_login": true,
+  "executable": "./TerrariaServer.bin.x86_64",
+  "default_args": ["-config", "serverconfig.txt"],
+  "stop_mode": "sigterm",
+  "stop_warn_secs": 0,
+  "ports": [
+    { "key": "game", "default": 7777, "proto": "tcp", "desc": "游戏端口", "public": true }
+  ],
+  "configs": [
+    { "path": "serverconfig.txt", "format": "raw", "seed_from": "serverconfig-default.txt", "label": "服务器配置 (serverconfig.txt)" }
+  ],
+  "backup_paths": [],
+  "notes": "世界文件在实例目录之外，需手动备份 ~/.local/share/Terraria/Worlds。模板按官方文档编写，未在本机实测。"
+}

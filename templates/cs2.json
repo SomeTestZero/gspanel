@@ -1,0 +1,19 @@
+{
+  "id": "cs2",
+  "name": "反恐精英2 CS2",
+  "description": "Counter-Strike 2 专用服务器。公网显示需要在启动参数中加入 GSLT 令牌（+sv_setsteamaccount）。",
+  "steam_app_id": 730,
+  "anonymous_login": true,
+  "executable": "./game/bin/linuxsteamrt64/cs2",
+  "default_args": ["-dedicated", "+map", "de_dust2", "+game_mode", "0", "+game_type", "0", "-maxplayers", "16"],
+  "stop_mode": "sigterm",
+  "stop_warn_secs": 0,
+  "ports": [
+    { "key": "game", "default": 27015, "proto": "udp", "desc": "游戏端口", "public": true }
+  ],
+  "configs": [
+    { "path": "game/csgo/cfg/server.cfg", "format": "raw", "seed_from": "", "label": "服务器配置 (server.cfg)" }
+  ],
+  "backup_paths": ["game/csgo/cfg"],
+  "notes": "GSLT 令牌需在 https://steamcommunity.com/dev/managegameservers 申请。"
+}

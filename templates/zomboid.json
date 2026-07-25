@@ -1,0 +1,18 @@
+{
+  "id": "zomboid",
+  "name": "僵尸毁灭工程 Project Zomboid",
+  "description": "Project Zomboid 专用服务器。配置与存档在 /home/games/Zomboid（实例目录之外），首次启动后生成。",
+  "steam_app_id": 380870,
+  "anonymous_login": true,
+  "executable": "./start-server.sh",
+  "default_args": ["-servername", "servertest", "-adminpassword", "changeme"],
+  "stop_mode": "sigterm",
+  "stop_warn_secs": 0,
+  "ports": [
+    { "key": "game", "default": 16261, "proto": "udp", "desc": "游戏端口", "public": true },
+    { "key": "direct", "default": 16262, "proto": "udp", "desc": "直连端口", "public": true }
+  ],
+  "configs": [],
+  "backup_paths": [],
+  "notes": "安装后请立即修改启动参数里的 -adminpassword。配置文件 servertest.ini 生成于 ~/Zomboid/Server/，可用 SSH 手动编辑。模板按官方文档编写，未在本机实测。"
+}

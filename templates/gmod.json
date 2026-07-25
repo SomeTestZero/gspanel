@@ -1,0 +1,19 @@
+{
+  "id": "gmod",
+  "name": "盖瑞模组 Garry's Mod",
+  "description": "Garry's Mod 专用服务器（Source 引擎，srcds）。",
+  "steam_app_id": 4020,
+  "anonymous_login": true,
+  "executable": "./srcds_run",
+  "default_args": ["-game", "garrysmod", "+gamemode", "sandbox", "+map", "gm_flatgrass", "+maxplayers", "16", "-condebug"],
+  "stop_mode": "sigterm",
+  "stop_warn_secs": 0,
+  "ports": [
+    { "key": "game", "default": 27015, "proto": "udp", "desc": "游戏端口", "public": true }
+  ],
+  "configs": [
+    { "path": "garrysmod/cfg/server.cfg", "format": "raw", "seed_from": "", "label": "服务器配置 (server.cfg)" }
+  ],
+  "backup_paths": ["garrysmod/cfg"],
+  "notes": "RCON 密码在 server.cfg 的 rcon_password 设置。模板按官方文档编写，未在本机实测。"
+}

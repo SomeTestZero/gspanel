@@ -1,0 +1,17 @@
+{
+  "id": "valheim",
+  "name": "英灵神殿 Valheim",
+  "description": "Valheim 专用服务器。服务器名/密码/世界名通过启动参数配置（在实例「设置」里修改启动参数）。",
+  "steam_app_id": 896660,
+  "anonymous_login": true,
+  "executable": "./valheim_server.x86_64",
+  "default_args": ["-nographics", "-batchmode", "-name", "MyValheimServer", "-port", "2456", "-world", "Dedicated", "-password", "changeme", "-public", "1"],
+  "stop_mode": "sigterm",
+  "stop_warn_secs": 0,
+  "ports": [
+    { "key": "game", "default": 2456, "proto": "udp", "desc": "游戏端口（2456-2457 连续两个）", "public": true }
+  ],
+  "configs": [],
+  "backup_paths": ["."],
+  "notes": "密码至少5位。世界存档实际在 ~/.config/unity3d/IronGate/Valheim，备份前请注意。"
+}

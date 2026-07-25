@@ -1,0 +1,29 @@
+{
+  "id": "corekeeper",
+  "name": "地心护核者 Core Keeper",
+  "description": "Core Keeper 专用服务器。",
+  "steam_app_id": 1963700,
+  "anonymous_login": true,
+  "executable": "./CoreKeeperServer",
+  "default_args": [
+    "-batchmode",
+    "-nographics",
+    "-logFile",
+    "logs/server.log"
+  ],
+  "stop_mode": "sigterm",
+  "stop_warn_secs": 0,
+  "ports": [
+    {
+      "key": "game",
+      "default": 27015,
+      "proto": "udp",
+      "desc": "游戏端口",
+      "public": true
+    }
+  ],
+  "backup_paths": [
+    "."
+  ],
+  "notes": "世界存档在实例目录内。模板按官方文档编写，未在本机实测。"
+}

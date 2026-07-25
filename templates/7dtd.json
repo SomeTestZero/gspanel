@@ -1,0 +1,19 @@
+{
+  "id": "7dtd",
+  "name": "七日杀 7 Days to Die",
+  "description": "7 Days to Die 专用服务器，配置为 XML 文件（raw 模式编辑）。",
+  "steam_app_id": 294420,
+  "anonymous_login": true,
+  "executable": "./7DaysToDieServer.x86_64",
+  "default_args": ["-quit", "-batchmode", "-nographics", "-dedicated", "-configfile=serverconfig.xml"],
+  "stop_mode": "sigterm",
+  "stop_warn_secs": 0,
+  "ports": [
+    { "key": "game", "default": 26900, "proto": "tcp", "desc": "游戏端口（26900-26902 TCP+UDP）", "public": true }
+  ],
+  "configs": [
+    { "path": "serverconfig.xml", "format": "raw", "seed_from": "serverconfig.xml", "label": "服务器配置 (serverconfig.xml)" }
+  ],
+  "backup_paths": ["Saves", "serverconfig.xml"],
+  "notes": "默认配置在 serverconfig.xml，首次启动后按需修改。"
+}

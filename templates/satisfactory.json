@@ -1,0 +1,17 @@
+{
+  "id": "satisfactory",
+  "name": "幸福工厂 Satisfactory",
+  "description": "Satisfactory 专用服务器。首次连接需在游戏客户端的 Server Manager 中设置管理员密码并创建会话。",
+  "steam_app_id": 1690800,
+  "anonymous_login": true,
+  "executable": "./FactoryServer.sh",
+  "default_args": ["-log", "-unattended"],
+  "stop_mode": "sigterm",
+  "stop_warn_secs": 0,
+  "ports": [
+    { "key": "game", "default": 7777, "proto": "udp", "desc": "游戏/查询端口", "public": true }
+  ],
+  "configs": [],
+  "backup_paths": ["FactoryGame/Saved"],
+  "notes": "1.0 起只需 UDP 7777。服务器管理（密码/会话/存档）在游戏客户端内进行。模板按官方文档编写，未在本机实测。"
+}

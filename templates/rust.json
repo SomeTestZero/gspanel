@@ -1,0 +1,18 @@
+{
+  "id": "rust",
+  "name": "腐蚀 Rust",
+  "description": "Rust 专用服务器。注意：Rust 的 RCON 是 WebSocket 协议，面板暂不支持其命令通道，仅可查看日志。",
+  "steam_app_id": 258550,
+  "anonymous_login": true,
+  "executable": "./RustDedicated",
+  "default_args": ["-batchmode", "-nographics", "+server.port", "28015", "+server.identity", "server1", "+server.hostname", "My Rust Server", "+server.maxplayers", "50", "+server.worldsize", "3000", "+server.seed", "12345"],
+  "stop_mode": "sigterm",
+  "stop_warn_secs": 0,
+  "ports": [
+    { "key": "game", "default": 28015, "proto": "udp", "desc": "游戏端口", "public": true },
+    { "key": "rcon", "default": 28016, "proto": "tcp", "desc": "RCON（WebSocket，面板暂不支持）", "public": false }
+  ],
+  "configs": [],
+  "backup_paths": ["server/server1"],
+  "notes": "存档在 server/<identity> 目录（与启动参数 server.identity 对应）。首次启动生成地图较慢。模板按官方文档编写，未在本机实测。"
+}

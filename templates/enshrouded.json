@@ -1,0 +1,20 @@
+{
+  "id": "enshrouded",
+  "name": "雾锁王国 Enshrouded",
+  "description": "Enshrouded 专用服务器，JSON 格式配置（首次启动后生成）。",
+  "steam_app_id": 2278520,
+  "anonymous_login": true,
+  "executable": "./enshrouded_server.x86_64",
+  "default_args": [],
+  "stop_mode": "sigterm",
+  "stop_warn_secs": 0,
+  "ports": [
+    { "key": "game", "default": 15636, "proto": "udp", "desc": "游戏端口", "public": true },
+    { "key": "query", "default": 15637, "proto": "udp", "desc": "查询端口", "public": true }
+  ],
+  "configs": [
+    { "path": "enshrouded_server.json", "format": "raw", "seed_from": "", "label": "服务器配置 (enshrouded_server.json)" }
+  ],
+  "backup_paths": ["savegame"],
+  "notes": "服务器名与密码在 enshrouded_server.json 中设置（首次启动生成，改后重启生效）。模板按官方文档编写，未在本机实测。"
+}
