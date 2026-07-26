@@ -467,7 +467,7 @@ async function initConfigTab(inst, tmpl) {
       return;
     }
     const vals = data.values || {};
-    const fields = data.schema.map(f => {
+    const renderField = (f) => {
       let v = vals[f.key];
       if (v === undefined) v = f.default ?? "";
       let input;
@@ -490,8 +490,19 @@ async function initConfigTab(inst, tmpl) {
       if (f.note) hints.push(f.note);
       const hintHtml = hints.length ? `<div class="hint">${esc(hints.join(" · "))}</div>` : "";
       return `<div><label>${esc(f.label || f.key)} <span class="mono" style="color:#5a6b7d">${esc(f.key)}</span></label>${input}${hintHtml}</div>`;
-    }).join("");
-    cb.innerHTML = `<div class="form-row">${fields}</div>
+    };
+    // 按 group 折叠分组；未分组的归入「其他」，第一个分组默认展开
+    const groups = [];
+    const gidx = {};
+    data.schema.forEach(f => {
+      const g = f.group || "其他";
+      if (!(g in gidx)) { gidx[g] = groups.length; groups.push({ name: g, fields: [] }); }
+      groups[gidx[g]].fields.push(f);
+    });
+    const fields = groups.map((g, i) =>
+      `<details class="cfg-group" ${i === 0 ? "open" : ""}><summary>${esc(g.name)}<span class="hint">（${g.fields.length} 项）</span></summary><div class="form-row">${g.fields.map(renderField).join("")}</div></details>`
+    ).join("");
+    cb.innerHTML = `${fields}
       <div class="form-actions"><button class="primary" id="cfgSave">保存配置</button>
       ${restartNowHtml}<span class="hint">未勾选则下次启动生效</span></div>`;
     document.getElementById("cfgSave").onclick = async () => {

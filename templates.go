@@ -28,6 +28,7 @@ type PortSpec struct {
 type ConfigField struct {
 	Key     string   `json:"key"`
 	Label   string   `json:"label"`
+	Group   string   `json:"group,omitempty"` // 配置页分组标题（可折叠），空则归入「其他」
 	Type    string   `json:"type"` // string | password | int | float | bool | select
 	Default any      `json:"default,omitempty"`
 	Options []string `json:"options,omitempty"` // select
