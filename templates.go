@@ -31,7 +31,10 @@ type ConfigField struct {
 	Type    string   `json:"type"` // string | password | int | float | bool | select
 	Default any      `json:"default,omitempty"`
 	Options []string `json:"options,omitempty"` // select
+	Min     *float64 `json:"min,omitempty"`     // int/float 输入约束（仅在有官方/可靠依据时填写）
+	Max     *float64 `json:"max,omitempty"`
 	Desc    string   `json:"desc,omitempty"`
+	Note    string   `json:"note,omitempty"` // 补充说明（已知问题/注意事项）
 }
 
 type ConfigSpec struct {
@@ -60,7 +63,8 @@ type GameTemplate struct {
 	RCON           *RCONSpec    `json:"rcon,omitempty"`
 	Ports          []PortSpec   `json:"ports"`
 	Configs        []ConfigSpec `json:"configs,omitempty"`
-	BackupPaths    []string     `json:"backup_paths"` // 相对实例目录
+	BackupPaths    []string     `json:"backup_paths"`            // 相对实例目录
+	WorldPaths     []string     `json:"world_paths,omitempty"`   // 世界存档路径（相对实例目录，「创建新世界」时删除）
 	Notes          string       `json:"notes,omitempty"`
 }
 

@@ -11,6 +11,8 @@ let S = {
   es: null,          // 当前 EventSource
   pollers: [],       // 定时器
   taskStream: null,
+  renderSeq: 0,      // 渲染代际：过期渲染一律丢弃
+  dashSig: "",       // 仪表盘实例状态签名（变化才整体重绘）
 };
 
 /* ---------- 工具 ---------- */
@@ -34,12 +36,21 @@ function toast(msg, ok = true) {
   setTimeout(() => d.remove(), 3500);
 }
 async function api(path, opts = {}) {
-  const r = await fetch(path, {
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
-    ...opts,
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
+  let r;
+  try {
+    r = await fetch(path, {
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(15000), // 无超时会在网络抖动时让页面假死
+      ...opts,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+  } catch (e) {
+    if (e.name === "TimeoutError" || e.name === "AbortError") {
+      throw new Error("请求超时：面板响应缓慢或网络中断");
+    }
+    throw new Error("网络错误: " + e.message);
+  }
   if (r.status === 401 && !path.endsWith("/login")) {
     // 会话失效：直接切到登录页（不能调 render()，否则 /api/me 的 401 会造成无限递归重绘）
     S.authed = false;
@@ -95,20 +106,27 @@ function renderLogin() {
   <div class="login-wrap"><div class="login-box">
     <h1>GS<span style="color:var(--accent)">Panel</span></h1>
     <p>轻量游戏服务器管理面板</p>
-    <label>管理员密码</label>
-    <input type="password" id="pw" autofocus placeholder="输入密码">
-    <button class="primary" id="loginBtn">登 录</button>
+    <form id="loginForm">
+      <label>管理员密码</label>
+      <input type="password" id="pw" autofocus placeholder="输入密码" autocomplete="current-password">
+      <button class="primary" type="submit">登 录</button>
+    </form>
   </div></div>`;
   const doLogin = async () => {
+    const pw = document.getElementById("pw").value;
+    if (!pw) return;
     try {
-      await api("/api/login", { method: "POST", body: { password: document.getElementById("pw").value } });
+      await api("/api/login", { method: "POST", body: { password: pw } });
       S.authed = true;
       nav("dashboard");
       render();
     } catch (e) { toast(e.message, false); }
   };
-  document.getElementById("loginBtn").onclick = doLogin;
-  document.getElementById("pw").onkeydown = e => { if (e.key === "Enter") doLogin(); };
+  // 原生 form 提交：回车/点击按钮都走这里（兼容输入法组合状态，keydown 方案会被 IME 吞掉）
+  document.getElementById("loginForm").onsubmit = e => {
+    e.preventDefault();
+    doLogin();
+  };
 }
 
 /* ---------- 框架 ---------- */
@@ -174,23 +192,27 @@ function connectInfo(i, publicIp) {
 }
 
 /* ---------- 仪表盘 ---------- */
-function statCard(k, v, pct) {
+function statCard(key, k, v, pct) {
   const cls = pct == null ? "" : (pct > 90 ? "crit" : pct > 70 ? "warn" : "");
-  return `<div class="stat-card"><div class="k">${k}</div><div class="v">${v}</div>
+  return `<div class="stat-card" data-stat="${key}"><div class="k">${k}</div><div class="v">${v}</div>
     ${pct == null ? "" : `<div class="bar ${cls}"><div style="width:${Math.min(100, pct)}%"></div></div>`}</div>`;
 }
 
-async function renderDashboard() {
+function dashboardSig(insts) {
+  return insts.map(i => `${i.name}:${i.installed}:${i.status && i.status.active_state}`).join("|");
+}
+
+async function renderDashboard(seq) {
   const [sys, insts] = await Promise.all([api("/api/system"), api("/api/instances")]);
   S.system = sys;
   S.instances = insts;
   const st = sys.stats;
   const stats = `
   <div class="grid cols-4">
-    ${statCard("CPU 负载 (1/5/15分钟)", `${st.load1.toFixed(2)} / ${st.load5.toFixed(2)} / ${st.load15.toFixed(2)}`, st.load1 / st.cpu_cores * 100)}
-    ${statCard("内存", `${fmtBytes(st.mem_total - st.mem_avail)} / ${fmtBytes(st.mem_total)}`, st.mem_used_pct)}
-    ${statCard("Swap", `${fmtBytes(st.swap_total - st.swap_free)} / ${fmtBytes(st.swap_total)}`, st.swap_total ? (st.swap_total - st.swap_free) / st.swap_total * 100 : 0)}
-    ${statCard("磁盘 /", `${fmtBytes(st.disk_total - st.disk_free)} / ${fmtBytes(st.disk_total)}`, st.disk_used_pct)}
+    ${statCard("cpu", "CPU 负载 (1/5/15分钟)", `${st.load1.toFixed(2)} / ${st.load5.toFixed(2)} / ${st.load15.toFixed(2)}`, st.load1 / st.cpu_cores * 100)}
+    ${statCard("mem", "内存", `${fmtBytes(st.mem_total - st.mem_avail)} / ${fmtBytes(st.mem_total)}`, st.mem_used_pct)}
+    ${statCard("swap", "Swap", `${fmtBytes(st.swap_total - st.swap_free)} / ${fmtBytes(st.swap_total)}`, st.swap_total ? (st.swap_total - st.swap_free) / st.swap_total * 100 : 0)}
+    ${statCard("disk", "磁盘 /", `${fmtBytes(st.disk_total - st.disk_free)} / ${fmtBytes(st.disk_total)}`, st.disk_used_pct)}
   </div>
   <div class="row mt" style="color:var(--text-dim);font-size:12px">
     <span>运行时长: ${esc(st.uptime)}</span><span>·</span><span>CPU 核心: ${st.cpu_cores}</span><span>·</span>
@@ -200,13 +222,13 @@ async function renderDashboard() {
   const cards = insts.length ? insts.map(i => {
     const running = i.status && i.status.active_state === "active";
     return `<div class="card inst-card">
-      <span class="dot ${dotClass(i.status)}"></span>
+      <span class="dot ${dotClass(i.status)}" data-dot="${esc(i.name)}"></span>
       <div>
         <div class="name">${esc(i.display_name)}</div>
         <div class="meta">${esc(i.template_name)} · ${esc(i.name)} · ${Object.entries(i.ports).map(([k, v]) => `${k}:${v}`).join(" ")}</div>
         ${connectInfo(i, sys.public_ip)}
       </div>
-      <div class="res">${running ? `内存 ${fmtBytes(i.status.memory_bytes)} · CPU ${(i.cpu_percent || 0).toFixed(0)}%` : statusText(i.status, i.installed)}</div>
+      <div class="res" data-res="${esc(i.name)}">${running ? `内存 ${fmtBytes(i.status.memory_bytes)} · CPU ${(i.cpu_percent || 0).toFixed(0)}%` : statusText(i.status, i.installed)}</div>
       <div class="actions">
         ${!i.installed ? `<button class="small primary" data-act="install" data-n="${esc(i.name)}">安装</button>` : ""}
         ${i.installed && !running ? `<button class="small primary" data-act="start" data-n="${esc(i.name)}">启动</button>` : ""}
@@ -219,12 +241,49 @@ async function renderDashboard() {
 
   // 竞态守卫：await 期间用户可能已跳转其他页面，过期渲染直接丢弃
   if (S.route.page !== "dashboard") return;
+  if (seq !== undefined && seq !== S.renderSeq) return;
+  S.dashSig = dashboardSig(insts);
   renderLayout(`<div class="page-title">仪表盘</div>${stats}<div class="page-title mt">实例</div>${cards}`);
   document.querySelectorAll("[data-act]").forEach(b => b.onclick = () => instanceAction(b.dataset.n, b.dataset.act));
-  addPoll(async () => {
-    if (S.route.page !== "dashboard") return;
-    try { renderDashboard(); } catch (e) {}
-  }, 5000);
+  addPoll(refreshDashboard, 5000);
+}
+
+/* 轮询刷新：状态没变就只更新数字（不替换 DOM，避免吃掉进行中的点击） */
+async function refreshDashboard() {
+  if (S.route.page !== "dashboard") return;
+  let sys, insts;
+  try {
+    [sys, insts] = await Promise.all([api("/api/system"), api("/api/instances")]);
+  } catch (e) { return; } // 网络抖动时静默跳过本轮，不打断用户
+  if (S.route.page !== "dashboard") return;
+  const sig = dashboardSig(insts);
+  if (sig !== S.dashSig) { renderDashboard(); return; } // 状态变化（启停/增删）才整体重绘
+  S.system = sys;
+  S.instances = insts;
+  const st = sys.stats;
+  const setStat = (key, v, pct) => {
+    const card = document.querySelector(`[data-stat="${key}"]`);
+    if (!card) return;
+    card.querySelector(".v").textContent = v;
+    const bar = card.querySelector(".bar");
+    if (bar && pct != null) {
+      bar.className = "bar" + (pct > 90 ? " crit" : pct > 70 ? " warn" : "");
+      bar.firstElementChild.style.width = Math.min(100, pct) + "%";
+    }
+  };
+  setStat("cpu", `${st.load1.toFixed(2)} / ${st.load5.toFixed(2)} / ${st.load15.toFixed(2)}`, st.load1 / st.cpu_cores * 100);
+  setStat("mem", `${fmtBytes(st.mem_total - st.mem_avail)} / ${fmtBytes(st.mem_total)}`, st.mem_used_pct);
+  setStat("swap", `${fmtBytes(st.swap_total - st.swap_free)} / ${fmtBytes(st.swap_total)}`, st.swap_total ? (st.swap_total - st.swap_free) / st.swap_total * 100 : 0);
+  setStat("disk", `${fmtBytes(st.disk_total - st.disk_free)} / ${fmtBytes(st.disk_total)}`, st.disk_used_pct);
+  for (const i of insts) {
+    const dot = document.querySelector(`[data-dot="${i.name}"]`);
+    if (dot) dot.className = "dot " + dotClass(i.status);
+    const res = document.querySelector(`[data-res="${i.name}"]`);
+    if (res) {
+      const running = i.status && i.status.active_state === "active";
+      res.textContent = running ? `内存 ${fmtBytes(i.status.memory_bytes)} · CPU ${(i.cpu_percent || 0).toFixed(0)}%` : statusText(i.status, i.installed);
+    }
+  }
 }
 
 async function instanceAction(name, act) {
@@ -245,7 +304,7 @@ async function instanceAction(name, act) {
 }
 
 /* ---------- 实例详情 ---------- */
-async function renderInstance(name, tab) {
+async function renderInstance(name, tab, seq) {
   tab = tab || "console";
   const [inst, tmpl] = await Promise.all([
     api(`/api/instances/${name}`),
@@ -267,6 +326,7 @@ async function renderInstance(name, tab) {
 
   // 竞态守卫：await 期间用户可能已跳转，过期渲染直接丢弃
   if (S.route.page !== "instance" || S.route.arg !== name) return;
+  if (seq !== undefined && seq !== S.renderSeq) return;
   renderLayout(`
     <div class="page-title">
       <span class="dot ${dotClass(inst.status)}"></span> ${esc(inst.display_name)}
@@ -277,6 +337,7 @@ async function renderInstance(name, tab) {
       ${inst.installed && !running ? `<button class="primary small" id="iStart">启动</button>` : ""}
       ${running ? `<button class="small" id="iRestart">重启</button><button class="small" id="iStop">停止</button>` : ""}
       ${inst.installed ? `<button class="small" id="iUpdate">更新</button>` : ""}
+      ${inst.installed && t && (t.world_paths || []).length ? `<button class="small danger" id="iNewWorld">创建新世界</button>` : ""}
     </div>
     <div class="tabs">${tabHtml}</div>
     ${body}`);
@@ -290,6 +351,13 @@ async function renderInstance(name, tab) {
     if (!confirm("更新会短暂停服，继续？")) return;
     try {
       const task = await api(`/api/instances/${name}/update`, { method: "POST" });
+      openTaskModal(task.id);
+    } catch (e) { toast(e.message, false); }
+  });
+  bind("iNewWorld", async () => {
+    if (!confirm("警告：创建新世界将删除当前世界存档和所有玩家数据！\n\n流程：停止服务器 → 自动备份 → 删除世界存档 → 重启生成新世界。\n旧世界可在「备份」页恢复。\n\n确定继续吗？")) return;
+    try {
+      const task = await api(`/api/instances/${name}/new-world`, { method: "POST" });
       openTaskModal(task.id);
     } catch (e) { toast(e.message, false); }
   });
@@ -375,15 +443,25 @@ async function initConfigTab(inst, tmpl) {
     try {
       data = await api(`/api/instances/${inst.name}/config?path=${encodeURIComponent(path)}`);
     } catch (e) { cb.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+    // 保存成功后：勾选了「立即重启生效」则走重启任务（启动前会自动写回刚保存的配置）
+    const restartNowHtml = `<label class="hint" style="display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="cfgRestartNow"> 保存后立即重启生效</label>`;
+    const afterSave = async () => {
+      if (!document.getElementById("cfgRestartNow")?.checked) return;
+      try {
+        const t = await api(`/api/instances/${inst.name}/restart`, { method: "POST" });
+        openTaskModal(t.id);
+      } catch (e) { toast(e.message, false); }
+    };
     if (data.format === "raw" || !data.schema || !data.schema.length) {
       cb.innerHTML = `
         <textarea id="cfgRaw" rows="20">${esc(data.raw)}</textarea>
         <div class="form-actions"><button class="primary" id="cfgSaveRaw">保存</button>
-        <span class="hint">保存后需重启服务器生效</span></div>`;
+        ${restartNowHtml}<span class="hint">未勾选则下次启动生效</span></div>`;
       document.getElementById("cfgSaveRaw").onclick = async () => {
         try {
           await api(`/api/instances/${inst.name}/config`, { method: "PUT", body: { path, raw: document.getElementById("cfgRaw").value } });
           toast("已保存");
+          await afterSave();
         } catch (e) { toast(e.message, false); }
       };
       return;
@@ -401,20 +479,28 @@ async function initConfigTab(inst, tmpl) {
           `<option ${String(v) === o ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
       } else {
         const type = f.type === "password" ? "text" : (f.type === "int" || f.type === "float" ? "number" : "text");
-        const step = f.type === "float" ? ' step="any"' : "";
-        input = `<input type="${type}"${step} data-key="${esc(f.key)}" value="${esc(v)}">`;
+        const step = f.type === "float" ? ' step="any"' : (f.type === "int" ? ' step="1"' : "");
+        const mm = (f.min != null ? ` min="${f.min}"` : "") + (f.max != null ? ` max="${f.max}"` : "");
+        input = `<input type="${type}"${step}${mm} data-key="${esc(f.key)}" value="${esc(v)}">`;
       }
-      return `<div><label>${esc(f.label || f.key)} <span class="mono" style="color:#5a6b7d">${esc(f.key)}</span></label>${input}</div>`;
+      // 提示行：默认值 / 官方或可靠依据的范围 / 注意事项（无依据不展示，不编造范围）
+      const hints = [];
+      if (f.default !== undefined && f.default !== "") hints.push("默认 " + f.default);
+      if (f.min != null || f.max != null) hints.push("范围 " + (f.min ?? "-∞") + " ~ " + (f.max ?? "+∞"));
+      if (f.note) hints.push(f.note);
+      const hintHtml = hints.length ? `<div class="hint">${esc(hints.join(" · "))}</div>` : "";
+      return `<div><label>${esc(f.label || f.key)} <span class="mono" style="color:#5a6b7d">${esc(f.key)}</span></label>${input}${hintHtml}</div>`;
     }).join("");
     cb.innerHTML = `<div class="form-row">${fields}</div>
       <div class="form-actions"><button class="primary" id="cfgSave">保存配置</button>
-      <span class="hint">保存后需重启服务器生效</span></div>`;
+      ${restartNowHtml}<span class="hint">未勾选则下次启动生效</span></div>`;
     document.getElementById("cfgSave").onclick = async () => {
       const values = {};
       cb.querySelectorAll("[data-key]").forEach(el => values[el.dataset.key] = el.value);
       try {
         await api(`/api/instances/${inst.name}/config`, { method: "PUT", body: { path, values } });
         toast("已保存");
+        await afterSave();
       } catch (e) { toast(e.message, false); }
     };
   };
@@ -792,23 +878,24 @@ async function renderSettings() {
 
 /* ---------- 主渲染 ---------- */
 async function render() {
+  const seq = ++S.renderSeq;
   clearTimers();
   parseRoute();
   if (!S.authed) {
     try { await api("/api/me"); S.authed = true; }
     catch { renderLogin(); return; }
   }
-  try {
-    S.instances = await api("/api/instances");
-  } catch (e) { renderLogin(); return; }
+  // 即时反馈：先给加载占位，让用户知道点击已生效（数据到达前不再"没反应"）
+  const main = document.getElementById("main");
+  if (main) main.innerHTML = '<div class="empty">加载中...</div>';
   const { page, arg, arg2 } = S.route;
   try {
-    if (page === "dashboard") await renderDashboard();
-    else if (page === "instance" && arg) await renderInstance(arg, arg2);
+    if (page === "dashboard") await renderDashboard(seq);
+    else if (page === "instance" && arg) await renderInstance(arg, arg2, seq);
     else if (page === "new") await renderNew();
     else if (page === "tasks") await renderTasks();
     else if (page === "settings") await renderSettings();
-    else await renderDashboard();
+    else await renderDashboard(seq);
   } catch (e) {
     if (e.message !== "未登录") toast(e.message, false);
   }

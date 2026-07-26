@@ -153,6 +153,25 @@ func (sv *Server) postInstall(inst *Instance, tmpl *GameTemplate, log io.Writer)
 	return nil
 }
 
+// applySavedConfig 启动前把面板保存的配置写回游戏配置文件。
+// Palworld 等游戏在优雅关闭时会用内存配置覆盖配置文件，
+// 运行期间通过面板修改的值会丢失，故每次启动前以此快照为准。
+func (sv *Server) applySavedConfig(inst *Instance, tmpl *GameTemplate) error {
+	for path, values := range inst.ConfigValues {
+		spec := sv.findConfigSpec(tmpl, path)
+		if spec == nil || spec.Format == "raw" || len(values) == 0 {
+			continue
+		}
+		if _, err := os.Stat(inst.Dir + "/" + spec.Path); os.IsNotExist(err) {
+			continue // 配置文件尚未生成，跳过
+		}
+		if err := writeConfigFile(inst.Dir, spec, values, nil); err != nil {
+			return fmt.Errorf("写回配置 %s: %w", spec.Path, err)
+		}
+	}
+	return nil
+}
+
 // applyInstanceConfig 将实例的端口/密码等写入游戏配置文件
 func (sv *Server) applyInstanceConfig(inst *Instance, tmpl *GameTemplate, log io.Writer) error {
 	for i := range tmpl.Configs {

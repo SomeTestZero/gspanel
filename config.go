@@ -34,7 +34,11 @@ type Instance struct {
 	Args          []string          `json:"args"`
 	Env           map[string]string `json:"env,omitempty"`
 	AdminPassword string            `json:"admin_password,omitempty"` // 游戏内管理员/RCON 密码
-	Installed     bool              `json:"installed"`
+	// 面板侧保存的配置快照：配置文件路径 -> 键 -> 值。
+	// 部分游戏（如 Palworld）关机时会用内存中的配置重写配置文件，
+	// 因此每次启动前以此快照为准重新写入。
+	ConfigValues map[string]map[string]string `json:"config_values,omitempty"`
+	Installed    bool                         `json:"installed"`
 	Schedules     []*Schedule       `json:"schedules,omitempty"`
 	CreatedAt     time.Time         `json:"created_at"`
 }
@@ -52,10 +56,10 @@ type State struct {
 	PasswordSalt string `json:"password_salt"`
 	PasswordHash string `json:"password_hash"`
 	Instances    map[string]*Instance `json:"instances"`
+	Sessions     map[string]time.Time `json:"sessions,omitempty"` // 持久化会话：面板重启不踢人
 
-	sessions map[string]time.Time // token -> 过期时间（内存态）
 	loginMu  sync.Mutex
-	loginFail map[string][]time.Time // IP -> 失败时间
+	loginFail map[string][]time.Time // IP -> 失败时间（内存态）
 }
 
 func (s *State) BindAddr() string {
@@ -77,7 +81,7 @@ func LoadState(path string) (*State, string, error) {
 	s := &State{
 		path:      path,
 		Instances: map[string]*Instance{},
-		sessions:  map[string]time.Time{},
+		Sessions:  map[string]time.Time{},
 		loginFail: map[string][]time.Time{},
 	}
 	data, err := os.ReadFile(path)
@@ -102,8 +106,16 @@ func LoadState(path string) (*State, string, error) {
 	if s.Instances == nil {
 		s.Instances = map[string]*Instance{}
 	}
+	if s.Sessions == nil {
+		s.Sessions = map[string]time.Time{}
+	}
+	// 清理过期会话
+	for t, exp := range s.Sessions {
+		if time.Now().After(exp) {
+			delete(s.Sessions, t)
+		}
+	}
 	s.path = path
-	s.sessions = map[string]time.Time{}
 	s.loginFail = map[string][]time.Time{}
 	return s, "", nil
 }

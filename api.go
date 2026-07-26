@@ -123,6 +123,7 @@ func (sv *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/instances/{name}/start", sv.auth(sv.handleStart))
 	mux.HandleFunc("POST /api/instances/{name}/stop", sv.auth(sv.handleStop))
 	mux.HandleFunc("POST /api/instances/{name}/restart", sv.auth(sv.handleRestart))
+	mux.HandleFunc("POST /api/instances/{name}/new-world", sv.auth(sv.handleNewWorld))
 	mux.HandleFunc("PUT /api/instances/{name}/settings", sv.auth(sv.handleUpdateSettings))
 
 	mux.HandleFunc("GET /api/instances/{name}/console/stream", sv.auth(sv.handleConsoleStream))
@@ -391,6 +392,11 @@ func (sv *Server) handleStart(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusBadRequest, "实例尚未安装")
 		return
 	}
+	// 启动前写回面板保存的配置（游戏关机时可能覆盖了配置文件）
+	if err := sv.applySavedConfig(inst, sv.templateOf(inst)); err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	// 日志过大时截断保留尾部 1MB
 	logFile := inst.Dir + "/logs/console.log"
 	if fi, err := os.Stat(logFile); err == nil && fi.Size() > 50<<20 {
@@ -440,6 +446,22 @@ func (sv *Server) handleRestart(w http.ResponseWriter, r *http.Request) {
 	tmpl := sv.templateOf(inst)
 	t := sv.tasks.Run("restart", inst.Name, "重启 "+inst.DisplayName, func(ctx context.Context, log io.Writer, task *Task) error {
 		return sv.gracefulRestart(ctx, log, inst, tmpl)
+	})
+	jsonOK(w, t)
+}
+
+func (sv *Server) handleNewWorld(w http.ResponseWriter, r *http.Request) {
+	inst := sv.getInstance(w, r)
+	if inst == nil {
+		return
+	}
+	tmpl := sv.templateOf(inst)
+	if len(tmpl.WorldPaths) == 0 {
+		jsonError(w, http.StatusBadRequest, "该游戏模板不支持创建新世界")
+		return
+	}
+	t := sv.tasks.Run("new-world", inst.Name, "创建新世界 "+inst.DisplayName, func(ctx context.Context, log io.Writer, task *Task) error {
+		return sv.newWorld(ctx, log, inst, tmpl)
 	})
 	jsonOK(w, t)
 }
@@ -656,13 +678,20 @@ func (sv *Server) handleWriteConfig(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	sv.state.mu.Lock()
+	// 记录配置快照：游戏关机会用内存值覆盖配置文件，启动前以此为准写回
+	if req.Values != nil {
+		if inst.ConfigValues == nil {
+			inst.ConfigValues = map[string]map[string]string{}
+		}
+		inst.ConfigValues[req.Path] = req.Values
+	}
 	// 同步实例侧的管理员密码（RCON 用）
 	if v, ok := req.Values["AdminPassword"]; ok && v != inst.AdminPassword {
-		sv.state.mu.Lock()
 		inst.AdminPassword = v
-		_ = sv.state.saveLocked()
-		sv.state.mu.Unlock()
 	}
+	_ = sv.state.saveLocked()
+	sv.state.mu.Unlock()
 	jsonOK(w, map[string]any{"ok": true})
 }
 

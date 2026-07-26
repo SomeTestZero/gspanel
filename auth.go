@@ -13,27 +13,29 @@ const sessionTTL = 7 * 24 * time.Hour
 func (s *State) newSession() string {
 	token := randomToken(32)
 	s.mu.Lock()
-	s.sessions[token] = time.Now().Add(sessionTTL)
+	s.Sessions[token] = time.Now().Add(sessionTTL)
 	// 顺带清理过期会话
-	for t, exp := range s.sessions {
+	for t, exp := range s.Sessions {
 		if time.Now().After(exp) {
-			delete(s.sessions, t)
+			delete(s.Sessions, t)
 		}
 	}
+	_ = s.saveLocked() // 持久化：面板重启后会话仍然有效
 	s.mu.Unlock()
 	return token
 }
 
 func (s *State) validSession(token string) bool {
 	s.mu.RLock()
-	exp, ok := s.sessions[token]
+	exp, ok := s.Sessions[token]
 	s.mu.RUnlock()
 	return ok && time.Now().Before(exp)
 }
 
 func (s *State) dropSession(token string) {
 	s.mu.Lock()
-	delete(s.sessions, token)
+	delete(s.Sessions, token)
+	_ = s.saveLocked()
 	s.mu.Unlock()
 }
 

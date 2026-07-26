@@ -87,7 +87,11 @@ gmod / tf2 / ark-se / terraria / corekeeper。
   "configs": [{                   // 可选；format: option-settings | kv | raw
     "path": "cfg/server.ini", "format": "kv",
     "seed_from": "cfg/default.ini",       // 安装后从此复制生成
-    "schema": [{ "key": "MaxPlayers", "label": "人数上限", "type": "int" }]
+    "schema": [{
+      "key": "MaxPlayers", "label": "人数上限", "type": "int",
+      "default": 32, "min": 1, "max": 32, // 仅在有官方/可靠依据时填，无依据留空不展示
+      "note": "32 为游戏硬上限"           // 补充说明（已知问题/注意事项）
+    }]                                    // type: string|password|int|float|bool|select
   }],
   "backup_paths": ["save"],
   "notes": "显示在新建实例页的提示"

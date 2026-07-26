@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -109,6 +111,9 @@ func (sv *Server) gracefulRestart(ctx context.Context, log io.Writer, inst *Inst
 	wasRunning := st.ActiveState == "active"
 	if !wasRunning {
 		fmt.Fprintln(log, "服务器未运行，直接启动")
+		if err := sv.applySavedConfig(inst, tmpl); err != nil {
+			return err
+		}
 		if _, err := systemctl("start", unitName(inst)); err != nil {
 			return fmt.Errorf("启动失败: %s", err)
 		}
@@ -118,6 +123,9 @@ func (sv *Server) gracefulRestart(ctx context.Context, log io.Writer, inst *Inst
 		return err
 	}
 	fmt.Fprintln(log, "启动服务器...")
+	if err := sv.applySavedConfig(inst, tmpl); err != nil {
+		return err
+	}
 	if _, err := systemctl("start", unitName(inst)); err != nil {
 		return fmt.Errorf("启动失败: %s", err)
 	}
@@ -160,6 +168,46 @@ func (sv *Server) gracefulStop(ctx context.Context, log io.Writer, inst *Instanc
 	return nil
 }
 
+// newWorld 停服 -> 备份 -> 删除世界存档 -> 启动（游戏生成新世界）
+func (sv *Server) newWorld(ctx context.Context, log io.Writer, inst *Instance, tmpl *GameTemplate) error {
+	if len(tmpl.WorldPaths) == 0 {
+		return fmt.Errorf("该游戏模板不支持创建新世界")
+	}
+	st := serviceStatus(inst)
+	wasRunning := st.ActiveState == "active"
+	if wasRunning {
+		fmt.Fprintln(log, "停止服务器...")
+		if err := sv.gracefulStop(ctx, log, inst, tmpl); err != nil {
+			return err
+		}
+	}
+	fmt.Fprintln(log, "备份当前存档（可用于恢复旧世界）...")
+	if _, err := createBackup(ctx, log, inst, tmpl, 10); err != nil {
+		return fmt.Errorf("备份失败，已中止（未删除存档）: %w", err)
+	}
+	for _, p := range tmpl.WorldPaths {
+		if p == "" || strings.Contains(p, "..") {
+			return fmt.Errorf("世界存档路径非法: %q", p)
+		}
+		fmt.Fprintf(log, "删除世界存档 %s ...\n", p)
+		if err := os.RemoveAll(inst.Dir + "/" + p); err != nil {
+			return fmt.Errorf("删除 %s: %w", p, err)
+		}
+	}
+	if wasRunning {
+		fmt.Fprintln(log, "启动服务器（将生成新世界）...")
+		if err := sv.applySavedConfig(inst, tmpl); err != nil {
+			return err
+		}
+		if _, err := systemctl("start", unitName(inst)); err != nil {
+			return fmt.Errorf("启动失败: %s", err)
+		}
+	} else {
+		fmt.Fprintln(log, "世界存档已删除，下次启动时生成新世界")
+	}
+	return nil
+}
+
 // updateInstance 停服 -> steamcmd validate -> 重新生成脚本/配置 -> 启动
 func (sv *Server) updateInstance(ctx context.Context, log io.Writer, inst *Instance, tmpl *GameTemplate) error {
 	st := serviceStatus(inst)
@@ -178,6 +226,9 @@ func (sv *Server) updateInstance(ctx context.Context, log io.Writer, inst *Insta
 	}
 	if wasRunning {
 		fmt.Fprintln(log, "重新启动服务器...")
+		if err := sv.applySavedConfig(inst, tmpl); err != nil {
+			return err
+		}
 		if _, err := systemctl("start", unitName(inst)); err != nil {
 			return fmt.Errorf("启动失败: %s", err)
 		}
