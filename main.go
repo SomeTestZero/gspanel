@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -15,14 +16,27 @@ import (
 var embedded embed.FS
 
 const (
-	BaseDir      = "/root/gspanel"
-	DataDir      = BaseDir + "/data"
 	GamesHome    = "/home/games"
 	InstancesDir = GamesHome + "/instances"
 	BackupsDir   = GamesHome + "/backups"
 	SteamcmdDir  = GamesHome + "/steamcmd"
 	GamesUser    = "games"
 )
+
+// BaseDir 取二进制所在目录：clone 到任意位置都可运行，
+// 面板状态（data/）与用户模板（templates/）跟随二进制。
+var BaseDir = func() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return "/root/gspanel"
+	}
+	if p, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = p
+	}
+	return filepath.Dir(exe)
+}()
+
+var DataDir = BaseDir + "/data"
 
 type Server struct {
 	state     *State

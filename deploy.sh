@@ -5,7 +5,6 @@ set -euo pipefail
 
 UNIT=/etc/systemd/system/gspanel.service
 cd "$(dirname "$0")"
-[ "$(pwd)" = "/root/gspanel" ] || echo "警告：BaseDir 硬编码为 /root/gspanel，当前目录 $(pwd)，运行时会读错路径"
 
 [ "${EUID:-$(id -u)}" = 0 ] || { echo "需要 root 运行"; exit 1; }
 
@@ -48,14 +47,14 @@ if [ -f "$UNIT" ]; then
   systemctl restart gspanel
 else
   echo ">> 首次安装：写入 $UNIT 并开机自启"
-  cat > "$UNIT" <<'EOF'
+  cat > "$UNIT" <<EOF
 [Unit]
 Description=GSPanel - lightweight game server management panel
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/root/gspanel/gspanel
+ExecStart=$(pwd)/gspanel
 Restart=on-failure
 RestartSec=3
 LimitNOFILE=65536

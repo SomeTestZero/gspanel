@@ -3,7 +3,7 @@
 自用的游戏服管理后台。Go 单二进制（无运行时依赖，内存占用 ~11MB），前端页面内嵌，
 游戏进程由 systemd 托管（面板重启/崩溃不影响游戏），新游戏通过 JSON 模板扩展。
 
-- 面板源码与二进制：`/root/gspanel/`
+- 面板源码与二进制：clone 到任意目录皆可（本机在 `/root/gspanel/`），状态跟随二进制所在目录
 - 面板服务：`gspanel.service`（开机自启）
 - 游戏实例服务：`gspanel-<实例名>.service`（独立 unit，崩溃自拉起、开机自启）
 - 访问：`http://100.64.0.3:8800`（仅 Tailscale 内网）或 `http://gspanel.tail.yyplab.site:8800`
@@ -24,16 +24,17 @@
 
 - 游戏以 `games` 用户（uid 5）运行，实例目录 `/home/games/instances/<名>/`
 - 备份在 `/home/games/backups/<名>/`（tar.gz，保留策略按份数）
-- 所有状态在一个文件里：`/root/gspanel/data/config.json`（无数据库）
+- 所有状态在一个文件里：`面板目录/data/config.json`（无数据库）
 
 ## 新服务器安装
 
 一键脚本（幂等，可重复跑）：装 Go、建 `games` 用户、构建、写 systemd unit、开机自启。
-路径是硬编码常量（main.go:18-24）：面板必须在 `/root/gspanel`，游戏用户在 `/home/games`。
+clone 到任意目录都行：`BaseDir` 运行时取二进制所在路径（main.go），面板状态 `data/` 和
+用户模板 `templates/` 都跟随它；游戏侧路径固定 `/home/games`（实例/备份/steamcmd），与面板位置无关。
 
 ```bash
-cd /root && git clone <仓库地址> gspanel           # 或直接把源码拷到 /root/gspanel
-cd gspanel && ./deploy.sh
+git clone <仓库地址> gspanel && cd gspanel          # 位置随意，脚本以所在目录为准
+./deploy.sh
 ```
 
 跑完按提示：`journalctl -u gspanel | grep 密码` 拿首次随机密码登录，
@@ -46,10 +47,12 @@ cd gspanel && ./deploy.sh
 
 1. 旧机：实例 → 备份 → 立即备份（切换前先停服再备，保证一致），然后
    `./push-saves.sh` 收进 `saves/`，手动 `git add saves/ && git commit -m 'update saves' && git push`
-2. 新机：clone 仓库到 `/root/gspanel` → `./deploy.sh`（自动把 `saves/` 放进备份目录，
+2. 新机：clone 仓库（位置随意）→ `./deploy.sh`（自动把 `saves/` 放进备份目录，
    已有同名实例的机器会跳过，不会回灌来源机）
-3. 新机：用同一模板新建同名实例 → 安装游戏 → 实例「备份」页直接点「恢复」
-4. 玩家改用新面板首页显示的 IP:端口 连接
+3. 新机：用同一模板新建**同名**实例 → 安装游戏 → 实例「备份」页直接点「恢复」
+   （恢复时自动按面板记录重写 ini 里的端口/管理员密码/服务器名，游戏设置其余项随备份原样落地，无需重配）
+4. 计划任务（每日备份/重启）存在旧面板 config.json 里，不随 git 走，需在新面板重新添加
+5. 玩家改用新面板首页显示的 IP:端口 连接
 
 也可以不走 git：旧机备份页下载 tar.gz，新机备份页「上传备份」→「恢复」。
 
@@ -61,7 +64,7 @@ cd gspanel && ./deploy.sh
 ### 重新构建部署（改代码后）
 
 ```bash
-cd /root/gspanel && ./deploy.sh        # 已安装环境只构建+重启面板，幂等
+cd /root/gspanel && ./deploy.sh        # 本机路径；已安装环境只构建+重启面板，幂等
 ```
 
 面板重启不影响正在运行的游戏。需要 Go 1.22+（脚本会自动检测安装）。
@@ -97,7 +100,7 @@ systemctl start|stop|restart gspanel-palworld-1
 
 ## 游戏模板（扩展新游戏）
 
-模板 = 一个 JSON，放 `/root/gspanel/templates/` 重启面板生效，或在「新建实例」页从 URL 导入。
+模板 = 一个 JSON，放 `面板目录/templates/` 重启面板生效，或在「新建实例」页从 URL 导入。
 内置 14 个：palworld / valheim / cs2 / 7dtd / rust / satisfactory / zomboid / enshrouded /
 gmod / tf2 / ark-se / terraria / corekeeper / dst。
 

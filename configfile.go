@@ -71,8 +71,8 @@ func substituteOptionValues(content string, values map[string]string) (string, e
 	body := content[m[2]:m[3]]
 	for k, v := range values {
 		v = sanitizeOptionValue(v)
-		// 用 ( 或 , 锚定精确键名，捕获旧值以判断引号风格
-		re := regexp.MustCompile(`([(,]\s*` + regexp.QuoteMeta(k) + `\s*=\s*)("[^",)]*"|[^,)]*)`)
+		// 用 ( 或 , 或 body 起始锚定精确键名（首键前面没有定界符），捕获旧值以判断引号风格
+		re := regexp.MustCompile(`(^|[(,])\s*` + regexp.QuoteMeta(k) + `\s*=\s*("[^",)]*"|[^,)]*)`)
 		idx := re.FindStringSubmatchIndex(body)
 		if idx == nil {
 			// 键不存在：追加到末尾

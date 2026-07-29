@@ -209,6 +209,7 @@ func (sv *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 		"stats":              ReadSystemStats(),
 		"deps":               depsStatus(),
 		"bind_addr":          sv.state.BindAddr(),
+		"base_dir":           BaseDir,
 		"public_ip":          sv.publicIP(),
 		"public_ip_override": override,
 		"version":            "1.0.0",
@@ -789,7 +790,7 @@ func (sv *Server) handleRestoreBackup(w http.ResponseWriter, r *http.Request) {
 	tmpl := sv.templateOf(inst)
 	file := r.PathValue("file")
 	t := sv.tasks.Run("restore", inst.Name, "恢复备份 "+file, func(ctx context.Context, log io.Writer, task *Task) error {
-		return restoreBackup(ctx, log, inst, tmpl, file)
+		return sv.restoreBackup(ctx, log, inst, tmpl, file)
 	})
 	jsonOK(w, t)
 }

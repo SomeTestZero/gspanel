@@ -94,8 +94,8 @@ func createBackup(ctx context.Context, log io.Writer, inst *Instance, tmpl *Game
 	return name, nil
 }
 
-// restoreBackup 停服 -> 解包 -> （由调用方决定是否）启动
-func restoreBackup(ctx context.Context, log io.Writer, inst *Instance, tmpl *GameTemplate, file string) error {
+// restoreBackup 停服 -> 解包 -> 按面板记录重写端口/密码 -> （由调用方决定是否）启动
+func (sv *Server) restoreBackup(ctx context.Context, log io.Writer, inst *Instance, tmpl *GameTemplate, file string) error {
 	if strings.Contains(file, "/") || strings.Contains(file, "..") {
 		return fmt.Errorf("非法备份文件名")
 	}
@@ -117,6 +117,12 @@ func restoreBackup(ctx context.Context, log io.Writer, inst *Instance, tmpl *Gam
 	cmd.Stdout, cmd.Stderr = log, log
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("解包失败: %w", err)
+	}
+	// 迁移场景：备份里的 ini 是旧机器的端口/管理员密码，按面板记录重写，恢复后即可用
+	if tmpl.RCON != nil {
+		if err := sv.applyInstanceConfig(inst, tmpl, log); err != nil {
+			return fmt.Errorf("重写实例配置失败: %w", err)
+		}
 	}
 	chownRecursive(inst.Dir)
 	if wasRunning {

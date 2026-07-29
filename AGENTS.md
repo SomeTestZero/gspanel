@@ -14,7 +14,8 @@
 
 - 面板服务：`gspanel.service`（开机自启），二进制 `/root/gspanel/gspanel`，源码同目录
 - 监听：默认 `:8800`（`State.BindAddr()`，存 `data/config.json` 的 `port`）
-- 常量（main.go:18-24）：`BaseDir=/root/gspanel`，`InstancesDir=/home/games/instances`，
+- 路径（main.go）：`BaseDir` 运行时取二进制所在目录（clone 位置随意，`data/`、`templates/`
+  用户模板都跟随它）；游戏侧固定 `InstancesDir=/home/games/instances`、
   `BackupsDir=/home/games/backups`，游戏进程以 `games` 用户运行
 - 状态：全部在 `data/config.json`（密码哈希、实例、计划任务、会话）
 - 控制台日志：`/home/games/instances/<名>/logs/console.log`；面板日志 `journalctl -u gspanel -f`
@@ -49,7 +50,7 @@ go vet ./...                                         # 无测试框架；临时�
 | configfile.go | 游戏配置读写，三种 format：`option-settings`（Palworld 专用就地替换）/ `kv` / `raw` |
 | tasks.go / stream.go | 后台任务（安装/更新/备份）+ SSE 日志订阅 |
 | scheduler.go | 计划任务（每日/间隔：重启、备份、更新）；`gracefulStop`：RCON 广播→存档→停 |
-| backup.go / monitor.go / netinfo.go / util.go | 备份打包/恢复/上传（跨服迁移存档：新机建同名模板实例→上传备份包→恢复）；/proc 资源监控；公网 IP 探测；chown 等杂项 |
+| backup.go / monitor.go / netinfo.go / util.go | 备份打包/恢复（恢复后按面板记录重写 ini 端口/密码/服务器名）/上传（跨服迁移存档：新机建同名模板实例→上传备份包或 deploy 放好 saves/→恢复）；/proc 资源监控；公网 IP 探测；chown 等杂项 |
 
 ## 模板系统（改动重灾区，坑都在这）
 

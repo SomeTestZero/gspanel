@@ -742,7 +742,7 @@ async function renderNew() {
         <input id="tplUrl" placeholder="粘贴模板 JSON 链接，从 URL 导入新游戏模板" style="flex:1;min-width:260px">
         <button class="small" id="tplImport">导入模板</button>
       </div>
-      <div class="hint">模板描述一个游戏的 AppID、启动命令、端口、配置格式与备份路径。也可手动将 JSON 放入 /root/gspanel/templates/ 后重启面板。</div>
+      <div class="hint">模板描述一个游戏的 AppID、启动命令、端口、配置格式与备份路径。也可手动将 JSON 放入 面板目录/templates/ 后重启面板。</div>
     </div>
     <div class="card">
       <h3>1. 选择游戏模板</h3>
@@ -893,7 +893,7 @@ async function renderSettings() {
         ${depRow("lib32stdc++6", "lib32stdc++6（32位运行库）", "")}
         ${depRow("steamcmd", "steamcmd（游戏下载工具）", '<button class="small primary" id="scmBtn">安装 steamcmd</button>')}
       </table>
-      <div class="hint">面板地址: <span class="mono">${esc(sys.bind_addr)}</span>（修改请编辑 ${"/root/gspanel/data/config.json"} 后重启面板）</div>
+      <div class="hint">面板地址: <span class="mono">${esc(sys.bind_addr)}</span>（修改请编辑 ${esc(sys.base_dir)}/data/config.json 后重启面板）</div>
     </div>
     <div class="card">
       <h3>公网地址（仪表盘分享给朋友的连接地址）</h3>
@@ -914,7 +914,7 @@ async function renderSettings() {
     </div>
     <div class="card">
       <h3>扩展新游戏</h3>
-      <div class="hint">将模板 JSON 放入 <span class="mono">/root/gspanel/templates/</span> 并重启面板即可。字段参照内置模板：
+      <div class="hint">将模板 JSON 放入 <span class="mono">${esc(sys.base_dir)}/templates/</span> 并重启面板即可。字段参照内置模板：
       steam_app_id、executable、default_args、ports、configs（option-settings/kv/raw 三种格式）、rcon、backup_paths。</div>
     </div>`);
   const depBtn = document.getElementById("depBtn");
