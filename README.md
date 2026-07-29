@@ -211,12 +211,15 @@ cp /tmp/cfg.bak /root/gspanel/data/config.json && systemctl restart gspanel
 
 ```
 /root/gspanel/
-├── gspanel            # 编译产物（运行时唯一需要的东西）
+├── gspanel            # 编译产物（运行时唯一需要的东西，已 gitignore）
+├── deploy.sh          # 幂等一键部署：裸机全装 / 已装只构建+重启面板，saves/ 自动就位
+├── push-saves.sh      # 收各实例最新备份到 saves/ 作迁移种子（git 提交留人工）
+├── saves/             # 迁移存档种子（<实例名>.tar.gz，每实例最新一份，git 跟踪）
 ├── *.go               # 后端：main/config/auth/api/instance/systemctl/steamcmd/
 │                      #   rcon/tasks/scheduler/backup/monitor/configfile/templates/netinfo/util/stream
 ├── static/            # 前端（index.html / app.js / style.css，go:embed 内嵌）
 ├── templates/         # 游戏模板 JSON（内置+导入都在这里）
-└── data/config.json   # 全部状态（密码哈希、实例、计划任务）
+└── data/config.json   # 全部状态（密码哈希、实例、计划任务，已 gitignore）
 
 /home/games/
 ├── steamcmd/          # steamcmd 本体

@@ -83,9 +83,9 @@ ark-se / terraria / corekeeper / dst（饥荒联机版，343050，2026-07 新增
 - `systemctl show --value` 多属性顺序不保证，解析要用 key=value
 - 改 `/home/games/instances/**` 任何文件后属主必须保持 `games:games`（用 `chownToGames`）
 - 写文件前先想：面板进程是 root，游戏进程是 games，写错属主游戏写不动
-- `data/config.json` 历史上被提交进过 git（含面板密码哈希/实例 RCON 密码）：`.gitignore`
-  已排除 `data/` 和二进制，但仍需 `git rm --cached` 清理索引并视情改密码；仓库必须 private
-  （`saves/` 迁移存档的 ini 里含游戏管理员/RCON 密码）
+- `data/config.json` 曾被提交进 git（含面板密码哈希/实例 RCON 密码）：已用 filter-repo 重写
+  全部历史并 force push（`081edfd` 起历史中无此文件），`.gitignore` 已排除 `data/` 和二进制；
+  仓库必须 private（`saves/` 迁移存档的 ini 里含游戏管理员/RCON 密码）
 
 ## 会话恢复 checklist
 
