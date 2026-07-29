@@ -29,6 +29,19 @@ func portInUse(port int, proto string) bool {
 	return false
 }
 
+// instancePort 取实例端口；老实例缺少模板后来新增的端口键时回退到模板默认值
+func instancePort(inst *Instance, tmpl *GameTemplate, key string) int {
+	if p, ok := inst.Ports[key]; ok && p > 0 {
+		return p
+	}
+	for _, spec := range tmpl.Ports {
+		if spec.Key == key {
+			return spec.Default
+		}
+	}
+	return 0
+}
+
 // validatePorts 校验端口：实例间不冲突、系统未占用
 func (sv *Server) validatePorts(selfName string, tmpl *GameTemplate, ports map[string]int) error {
 	for _, spec := range tmpl.Ports {

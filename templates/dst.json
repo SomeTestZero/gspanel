@@ -1,0 +1,55 @@
+{
+  "id": "dst",
+  "name": "饥荒联机版 Don't Starve Together",
+  "description": "DST 专用服务器（64位，仅地上世界，无洞穴）。配置与存档通过 -persistent_storage_root/-conf_dir 全部放在实例目录 dst/ 内。上线前必须填入 Klei 集群令牌：安装后先启动一次（会因缺令牌退出并生成配置目录），再到「配置」页粘贴 cluster_token 并修改服务器名，然后再次启动。",
+  "steam_app_id": 343050,
+  "anonymous_login": true,
+  "executable": "./bin64/dontstarve_dedicated_server_nullrenderer_x64",
+  "default_args": ["-console", "-persistent_storage_root", ".", "-conf_dir", "dst", "-cluster", "Cluster_1", "-shard", "Master"],
+  "stop_mode": "sigterm",
+  "stop_warn_secs": 0,
+  "ports": [
+    { "key": "game", "default": 10999, "proto": "udp", "desc": "游戏端口（玩家连接）", "public": true }
+  ],
+  "configs": [
+    {
+      "path": "dst/Cluster_1/cluster_token.txt",
+      "format": "raw",
+      "seed_from": "",
+      "label": "集群令牌 (cluster_token.txt，必填，否则服务器无法上线)"
+    },
+    {
+      "path": "dst/Cluster_1/cluster.ini",
+      "format": "kv",
+      "seed_from": "",
+      "label": "集群设置 (cluster.ini)",
+      "schema": [
+        { "key": "cluster_name", "group": "基础设置", "label": "服务器名称", "type": "string", "default": "DST Server" },
+        { "key": "cluster_description", "group": "基础设置", "label": "服务器简介", "type": "string" },
+        { "key": "cluster_password", "group": "基础设置", "label": "加入密码(留空=公开)", "type": "password" },
+        { "key": "cluster_intention", "group": "基础设置", "label": "服务器风格", "type": "select", "options": ["cooperative", "social", "competitive", "madness"], "default": "cooperative" },
+        { "key": "offline_cluster", "group": "基础设置", "label": "离线/局域网模式", "type": "select", "options": ["false", "true"], "default": "false", "note": "true 时不上线，仅局域网可连" },
+
+        { "key": "game_mode", "group": "玩法", "label": "游戏模式", "type": "select", "options": ["survival", "endless", "wilderness"], "default": "survival" },
+        { "key": "max_players", "group": "玩法", "label": "最大玩家数", "type": "int", "default": 6, "min": 1, "note": "官方默认 6，调高需自行承担性能开销" },
+        { "key": "pvp", "group": "玩法", "label": "PvP", "type": "select", "options": ["false", "true"], "default": "false" },
+        { "key": "pause_when_empty", "group": "玩法", "label": "无人时暂停世界", "type": "select", "options": ["true", "false"], "default": "true" },
+
+        { "key": "max_snapshots", "group": "高级", "label": "回滚快照数量", "type": "int", "default": 6, "min": 0 },
+        { "key": "console_enabled", "group": "高级", "label": "启用控制台", "type": "select", "options": ["true", "false"], "default": "true" }
+      ]
+    },
+    {
+      "path": "dst/Cluster_1/Master/server.ini",
+      "format": "kv",
+      "seed_from": "",
+      "label": "地上世界分片设置 (Master/server.ini)",
+      "schema": [
+        { "key": "server_port", "group": "网络", "label": "游戏端口", "type": "int", "default": 10999, "min": 1, "max": 65535, "note": "必须与实例「设置」里的游戏端口一致，改端口时两处都要改" }
+      ]
+    }
+  ],
+  "backup_paths": ["dst"],
+  "world_paths": ["dst/Cluster_1/Master/save"],
+  "notes": "① 令牌获取：https://accounts.klei.com/account/game/servers?game=DST （需拥有游戏的 Steam 账号），在「配置」页整段粘贴到 cluster_token.txt。② 首次启动会生成 cluster.ini / server.ini 等默认配置，因缺令牌退出属正常现象。③ 默认仅地上世界(Master)；加洞穴需另配 Caves 分片（shard_enabled/Caves/server.ini），本模板未覆盖。④ 布尔值必须是小写 true/false（面板里用下拉选择，勿手输 True）。⑤ 世界生成参数(worldgenoverride.lua)与 Mod(dedicated_server_mods_setup.lua / modoverrides.lua)面板不支持，需手动编辑 dst/Cluster_1/ 下的文件。⑥ 关服为 SIGTERM，DST 每天轮换自动存档，直接关服可能丢失当天未存档进度。⑦ 公网需放行游戏端口 UDP。模板按官方文档编写，未在本机实测。"
+}

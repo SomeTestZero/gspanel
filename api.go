@@ -73,6 +73,7 @@ func (sv *Server) instanceView(inst *Instance) map[string]any {
 		view["template_name"] = tmpl.Name
 		view["has_rcon"] = tmpl.RCON != nil
 		view["stop_mode"] = tmpl.StopMode
+		view["console_buttons"] = tmpl.ConsoleButtons
 		var pp []map[string]any
 		for _, p := range tmpl.Ports {
 			if p.Public {
@@ -134,6 +135,7 @@ func (sv *Server) registerRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("GET /api/instances/{name}/backups", sv.auth(sv.handleListBackups))
 	mux.HandleFunc("POST /api/instances/{name}/backups", sv.auth(sv.handleCreateBackup))
+	mux.HandleFunc("POST /api/instances/{name}/backups/upload", sv.auth(sv.handleUploadBackup))
 	mux.HandleFunc("GET /api/instances/{name}/backups/{file}/download", sv.auth(sv.handleDownloadBackup))
 	mux.HandleFunc("POST /api/instances/{name}/backups/{file}/restore", sv.auth(sv.handleRestoreBackup))
 	mux.HandleFunc("DELETE /api/instances/{name}/backups/{file}", sv.auth(sv.handleDeleteBackup))
@@ -606,6 +608,25 @@ func (sv *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusBadRequest, "实例未配置管理员密码，无法使用 RCON")
 		return
 	}
+	// 模板声明了 REST 映射的命令优先走 REST API（Palworld 等游戏 RCON 会丢响应）
+	verb, arg := req.Command, ""
+	if i := strings.IndexAny(verb, " \t"); i >= 0 {
+		verb, arg = verb[:i], strings.TrimSpace(verb[i+1:])
+	}
+	if tmpl.RestAPI != nil {
+		for name, spec := range tmpl.RestAPI.Commands {
+			if strings.EqualFold(name, verb) {
+				addr := fmt.Sprintf("127.0.0.1:%d", instancePort(inst, tmpl, tmpl.RestAPI.PortKey))
+				resp, err := restExec(addr, inst.AdminPassword, spec, arg)
+				if err != nil {
+					jsonError(w, http.StatusBadGateway, err.Error())
+					return
+				}
+				jsonOK(w, map[string]any{"response": resp})
+				return
+			}
+		}
+	}
 	addr := fmt.Sprintf("127.0.0.1:%d", inst.Ports[tmpl.RCON.PortKey])
 	resp, err := RconExec(addr, inst.AdminPassword, req.Command)
 	if err != nil {
@@ -721,6 +742,29 @@ func (sv *Server) handleCreateBackup(w http.ResponseWriter, r *http.Request) {
 		return err
 	})
 	jsonOK(w, t)
+}
+
+// handleUploadBackup 上传备份包（multipart 字段 file），用于跨服务器迁移存档
+func (sv *Server) handleUploadBackup(w http.ResponseWriter, r *http.Request) {
+	inst := sv.getInstance(w, r)
+	if inst == nil {
+		return
+	}
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		jsonError(w, http.StatusBadRequest, "解析上传失败: "+err.Error())
+		return
+	}
+	f, hdr, err := r.FormFile("file")
+	if err != nil {
+		jsonError(w, http.StatusBadRequest, "缺少文件字段 file")
+		return
+	}
+	defer f.Close()
+	if err := saveUploadedBackup(inst, hdr.Filename, f); err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jsonOK(w, map[string]any{"ok": true})
 }
 
 func (sv *Server) handleDownloadBackup(w http.ResponseWriter, r *http.Request) {

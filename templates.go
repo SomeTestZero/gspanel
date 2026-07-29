@@ -51,6 +51,26 @@ type RCONSpec struct {
 	PortKey string `json:"port_key"` // 对应 Ports 里的键
 }
 
+// RESTCommandSpec 把一条控制台命令映射到游戏 REST API（部分游戏 RCON 丢响应，REST 更可靠）
+type RESTCommandSpec struct {
+	Method string            `json:"method"` // GET | POST
+	Path   string            `json:"path"`   // 如 /v1/api/players
+	Format string            `json:"format,omitempty"` // players | metrics | kv，空则原样返回 body
+	Body   map[string]string `json:"body,omitempty"`   // POST JSON body；值 "$arg" 会被命令参数替换
+}
+
+type RESTSpec struct {
+	PortKey  string                     `json:"port_key"` // 对应 Ports 里的键
+	Commands map[string]RESTCommandSpec `json:"commands"` // 键为命令动词（大小写不敏感），如 ShowPlayers
+}
+
+// ConsoleButton 控制台快捷按钮；prompt 非空时点击先弹输入框，输入内容作为命令参数
+type ConsoleButton struct {
+	Label   string `json:"label"`
+	Command string `json:"command"`
+	Prompt  string `json:"prompt,omitempty"`
+}
+
 type GameTemplate struct {
 	ID             string       `json:"id"`
 	Name           string       `json:"name"`
@@ -62,6 +82,8 @@ type GameTemplate struct {
 	StopMode       string       `json:"stop_mode"`       // rcon | sigterm
 	StopWarnSecs   int          `json:"stop_warn_secs"`  // rcon 停止前提前广播秒数
 	RCON           *RCONSpec    `json:"rcon,omitempty"`
+	RestAPI        *RESTSpec    `json:"rest_api,omitempty"` // 可选：部分命令改走游戏 REST API（RCON 丢响应的游戏用）
+	ConsoleButtons []ConsoleButton `json:"console_buttons,omitempty"` // 可选：控制台快捷按钮，缺省用内置默认
 	Ports          []PortSpec   `json:"ports"`
 	Configs        []ConfigSpec `json:"configs,omitempty"`
 	BackupPaths    []string     `json:"backup_paths"`            // 相对实例目录
@@ -154,6 +176,24 @@ func validateTemplate(t *GameTemplate) error {
 		}
 		if t.RCON.Type != "source" {
 			return fmt.Errorf("暂只支持 source 类型 RCON")
+		}
+	}
+	if t.RestAPI != nil {
+		if !seen[t.RestAPI.PortKey] {
+			return fmt.Errorf("rest_api.port_key %q 未在 ports 中定义", t.RestAPI.PortKey)
+		}
+		for name, c := range t.RestAPI.Commands {
+			if c.Method != http.MethodGet && c.Method != http.MethodPost {
+				return fmt.Errorf("rest_api 命令 %s 的 method 须为 GET/POST", name)
+			}
+			if !strings.HasPrefix(c.Path, "/") {
+				return fmt.Errorf("rest_api 命令 %s 的 path 须以 / 开头", name)
+			}
+		}
+	}
+	for _, b := range t.ConsoleButtons {
+		if b.Label == "" || b.Command == "" {
+			return fmt.Errorf("console_buttons 存在缺 label/command 的按钮")
 		}
 	}
 	for _, c := range t.Configs {

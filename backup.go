@@ -128,6 +128,35 @@ func restoreBackup(ctx context.Context, log io.Writer, inst *Instance, tmpl *Gam
 	return nil
 }
 
+// saveUploadedBackup 把上传的备份包存入实例备份目录；拒绝覆盖同名文件
+func saveUploadedBackup(inst *Instance, name string, src io.Reader) error {
+	name = filepath.Base(name)
+	if !strings.HasSuffix(name, ".tar.gz") {
+		return fmt.Errorf("仅支持 .tar.gz 备份包")
+	}
+	if err := mkdirForGames(backupDir(inst)); err != nil {
+		return err
+	}
+	dest := backupDir(inst) + "/" + name
+	out, err := os.OpenFile(dest, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	if err != nil {
+		if os.IsExist(err) {
+			return fmt.Errorf("同名备份已存在，请先删除或改名后上传")
+		}
+		return err
+	}
+	if _, err := io.Copy(out, src); err != nil {
+		out.Close()
+		os.Remove(dest)
+		return err
+	}
+	if err := out.Close(); err != nil {
+		os.Remove(dest)
+		return err
+	}
+	return chownToGames(dest)
+}
+
 func deleteBackup(inst *Instance, file string) error {
 	if strings.Contains(file, "/") || strings.Contains(file, "..") {
 		return fmt.Errorf("非法备份文件名")

@@ -17,6 +17,7 @@
                   ├─ steamcmd 任务执行器（安装/更新，日志 SSE 推送）
                   ├─ systemd 生成器（每实例一个 unit + start.sh）
                   ├─ Source RCON 客户端（控制台命令/优雅停机）
+                  ├─ 游戏 REST API 客户端（Palworld 等 RCON 丢响应的游戏，查询/广播/踢禁走 REST）
                   ├─ 计划任务调度（定时重启/备份/更新）
                   └─ 监控（/proc + systemctl show，无外部 agent）
 ```
@@ -25,15 +26,45 @@
 - 备份在 `/home/games/backups/<名>/`（tar.gz，保留策略按份数）
 - 所有状态在一个文件里：`/root/gspanel/data/config.json`（无数据库）
 
+## 新服务器安装
+
+一键脚本（幂等，可重复跑）：装 Go、建 `games` 用户、构建、写 systemd unit、开机自启。
+路径是硬编码常量（main.go:18-24）：面板必须在 `/root/gspanel`，游戏用户在 `/home/games`。
+
+```bash
+cd /root && git clone <仓库地址> gspanel           # 或直接把源码拷到 /root/gspanel
+cd gspanel && ./deploy.sh
+```
+
+跑完按提示：`journalctl -u gspanel | grep 密码` 拿首次随机密码登录，
+然后到「设置/环境」装 steamcmd 与 32 位依赖，即可开始建实例。
+防火墙按需放行 8800（建议仅内网，见「网络与安全」）。
+
+### 从旧服务器迁移存档
+
+推荐走 git 仓库带存档（`saves/`，每实例只存最新一份 tar.gz，作迁移种子）：
+
+1. 旧机：实例 → 备份 → 立即备份（切换前先停服再备，保证一致），然后
+   `./push-saves.sh` 收进 `saves/`，手动 `git add saves/ && git commit -m 'update saves' && git push`
+2. 新机：clone 仓库到 `/root/gspanel` → `./deploy.sh`（自动把 `saves/` 放进备份目录，
+   已有同名实例的机器会跳过，不会回灌来源机）
+3. 新机：用同一模板新建同名实例 → 安装游戏 → 实例「备份」页直接点「恢复」
+4. 玩家改用新面板首页显示的 IP:端口 连接
+
+也可以不走 git：旧机备份页下载 tar.gz，新机备份页「上传备份」→「恢复」。
+
+注意：仓库必须 private（备份里的 ini 含游戏管理员/RCON 密码）；`saves/` 只放迁移种子，
+日常自动备份仍留在本机 `/home/games/backups/`（git 存二进制只增不减，频繁推送会让仓库膨胀）。
+
 ## 日常维护
 
 ### 重新构建部署（改代码后）
 
 ```bash
-cd /root/gspanel && go build -o gspanel . && systemctl restart gspanel
+cd /root/gspanel && ./deploy.sh        # 已安装环境只构建+重启面板，幂等
 ```
 
-面板重启不影响正在运行的游戏。需要 Go 1.22+（`apt install golang-go`）。
+面板重启不影响正在运行的游戏。需要 Go 1.22+（脚本会自动检测安装）。
 
 ### 查看日志
 
@@ -67,8 +98,8 @@ systemctl start|stop|restart gspanel-palworld-1
 ## 游戏模板（扩展新游戏）
 
 模板 = 一个 JSON，放 `/root/gspanel/templates/` 重启面板生效，或在「新建实例」页从 URL 导入。
-内置 13 个：palworld / valheim / cs2 / 7dtd / rust / satisfactory / zomboid / enshrouded /
-gmod / tf2 / ark-se / terraria / corekeeper。
+内置 14 个：palworld / valheim / cs2 / 7dtd / rust / satisfactory / zomboid / enshrouded /
+gmod / tf2 / ark-se / terraria / corekeeper / dst。
 
 ```jsonc
 {
@@ -81,6 +112,17 @@ gmod / tf2 / ark-se / terraria / corekeeper。
   "stop_mode": "sigterm",         // rcon | sigterm
   "stop_warn_secs": 10,           // rcon 模式停机前广播秒数
   "rcon": { "type": "source", "port_key": "rcon" },   // 可选
+  "rest_api": {                 // 可选：把指定控制台命令改走游戏 REST API（RCON 丢响应的游戏用）
+    "port_key": "rest",         // 对应 ports 里的键
+    "commands": {               // 键为命令动词（大小写不敏感）；body 里 "$arg" 会被命令参数替换
+      "ShowPlayers": { "method": "GET", "path": "/v1/api/players", "format": "players" },
+      "Broadcast":   { "method": "POST", "path": "/v1/api/announce", "body": { "message": "$arg" } }
+    }                           // format: players | metrics | kv，空则原样返回
+  },
+  "console_buttons": [          // 可选：控制台快捷按钮，缺省用内置默认
+    { "label": "在线玩家", "command": "ShowPlayers" },
+    { "label": "广播…", "command": "Broadcast", "prompt": "广播内容:" }  // prompt: 点击先弹输入框
+  ],
   "ports": [
     { "key": "game", "default": 8211, "proto": "udp", "desc": "游戏端口", "public": true }
   ],
@@ -137,7 +179,8 @@ curl -s -X POST localhost:8800/api/instances/palworld-1/command -H "$H" \
    （`ServerName="xxx"`），不带引号静默回退默认值。面板的写入逻辑已处理（保留原引号风格）。
 2. **世界参数固化**：经验倍率等在创建世界时写进存档，改 ini 只对新世界生效；
    服务器名/密码/端口每次启动生效。
-3. **Palworld RCON `Info` 无响应**是游戏自身 bug（其余命令正常）。
+3. **Palworld RCON 丢响应**是游戏自身 bug（命令会执行，但响应经常不发回）。面板的
+   `ShowPlayers/Info/Metrics/Broadcast/KickPlayer/BanPlayer` 已改走官方 REST API（模板 `rest_api` 声明），其余命令仍走 RCON。
 4. **steamcmd 报 "Missing configuration"**：删 `~/steamcmd/appcache` 与 `~/Steam/appcache` 重试。
 5. **systemctl show --value 多属性顺序不保证**，解析要用 key=value 形式。
 6. 修改 `Pal/Saved/` 下任何文件后属主保持 `games:games`，否则游戏写不动。

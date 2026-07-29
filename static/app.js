@@ -209,7 +209,7 @@ async function renderDashboard(seq) {
   const st = sys.stats;
   const stats = `
   <div class="grid cols-4">
-    ${statCard("cpu", "CPU 负载 (1/5/15分钟)", `${st.load1.toFixed(2)} / ${st.load5.toFixed(2)} / ${st.load15.toFixed(2)}`, st.load1 / st.cpu_cores * 100)}
+    ${statCard("cpu", `CPU 负载 (1/5/15分钟): ${st.load1.toFixed(2)} / ${st.load5.toFixed(2)} / ${st.load15.toFixed(2)}`, `${Math.round(st.load1 / st.cpu_cores * 100)}%`, st.load1 / st.cpu_cores * 100)}
     ${statCard("mem", "内存", `${fmtBytes(st.mem_total - st.mem_avail)} / ${fmtBytes(st.mem_total)}`, st.mem_used_pct)}
     ${statCard("swap", "Swap", `${fmtBytes(st.swap_total - st.swap_free)} / ${fmtBytes(st.swap_total)}`, st.swap_total ? (st.swap_total - st.swap_free) / st.swap_total * 100 : 0)}
     ${statCard("disk", "磁盘 /", `${fmtBytes(st.disk_total - st.disk_free)} / ${fmtBytes(st.disk_total)}`, st.disk_used_pct)}
@@ -261,17 +261,18 @@ async function refreshDashboard() {
   S.system = sys;
   S.instances = insts;
   const st = sys.stats;
-  const setStat = (key, v, pct) => {
+  const setStat = (key, v, pct, k) => {
     const card = document.querySelector(`[data-stat="${key}"]`);
     if (!card) return;
     card.querySelector(".v").textContent = v;
+    if (k != null) card.querySelector(".k").textContent = k;
     const bar = card.querySelector(".bar");
     if (bar && pct != null) {
       bar.className = "bar" + (pct > 90 ? " crit" : pct > 70 ? " warn" : "");
       bar.firstElementChild.style.width = Math.min(100, pct) + "%";
     }
   };
-  setStat("cpu", `${st.load1.toFixed(2)} / ${st.load5.toFixed(2)} / ${st.load15.toFixed(2)}`, st.load1 / st.cpu_cores * 100);
+  setStat("cpu", `${Math.round(st.load1 / st.cpu_cores * 100)}%`, st.load1 / st.cpu_cores * 100, `CPU 负载 (1/5/15分钟): ${st.load1.toFixed(2)} / ${st.load5.toFixed(2)} / ${st.load15.toFixed(2)}`);
   setStat("mem", `${fmtBytes(st.mem_total - st.mem_avail)} / ${fmtBytes(st.mem_total)}`, st.mem_used_pct);
   setStat("swap", `${fmtBytes(st.swap_total - st.swap_free)} / ${fmtBytes(st.swap_total)}`, st.swap_total ? (st.swap_total - st.swap_free) / st.swap_total * 100 : 0);
   setStat("disk", `${fmtBytes(st.disk_total - st.disk_free)} / ${fmtBytes(st.disk_total)}`, st.disk_used_pct);
@@ -378,20 +379,16 @@ function consoleTab(inst, running) {
       <input id="cmdInput" placeholder="${inst.has_rcon ? "输入 RCON 命令回车发送，如: ShowPlayers / Broadcast xxx / Save / Info" : "该游戏不支持 RCON，仅可查看日志"}" ${inst.has_rcon ? "" : "disabled"}>
       <button id="cmdSend" ${inst.has_rcon ? "" : "disabled"}>发送</button>
     </div>
-    ${inst.has_rcon ? `<div class="row mt">
-      <span class="hint">快捷:</span>
-      <button class="small" data-cmd="ShowPlayers">在线玩家</button>
-      <button class="small" data-cmd="Info">服务器信息</button>
-      <button class="small" data-cmd="Save">立即存档</button>
-      <button class="small" onclick="promptBroadcast()">广播…</button>
-    </div>` : ""}
+    ${inst.has_rcon ? `<div class="row mt" id="quickRow"><span class="hint">快捷:</span></div>` : ""}
   </div>`;
 }
-window.promptBroadcast = function () {
-  const name = S.route.arg;
-  const msg = prompt("广播内容（空格会自动转为下划线）:");
-  if (msg) sendCommand(name, "Broadcast " + msg.replace(/\s+/g, "_"));
-};
+/* 模板未定义 console_buttons 时的默认按钮（保持旧行为：广播空格转下划线） */
+const defaultConsoleButtons = [
+  { label: "在线玩家", command: "ShowPlayers" },
+  { label: "服务器信息", command: "Info" },
+  { label: "立即存档", command: "Save" },
+  { label: "广播…", command: "Broadcast", prompt: "广播内容（空格会自动转为下划线）:", underscore: true },
+];
 function initConsole(inst, running) {
   const box = document.getElementById("console");
   box.innerHTML = "";
@@ -416,13 +413,46 @@ function initConsole(inst, running) {
   };
   document.getElementById("cmdSend").onclick = send;
   input.onkeydown = e => { if (e.key === "Enter") send(); };
-  document.querySelectorAll("[data-cmd]").forEach(b => b.onclick = () => sendCommand(inst.name, b.dataset.cmd));
+  const row = document.getElementById("quickRow");
+  if (row) {
+    const btns = (Array.isArray(inst.console_buttons) && inst.console_buttons.length)
+      ? inst.console_buttons : defaultConsoleButtons;
+    btns.forEach(b => {
+      const el = document.createElement("button");
+      el.className = "small";
+      el.textContent = b.label;
+      el.onclick = () => {
+        if (b.prompt) {
+          let msg = prompt(b.prompt);
+          if (!msg) return;
+          if (b.underscore) msg = msg.replace(/\s+/g, "_");
+          sendCommand(inst.name, b.command + " " + msg);
+        } else {
+          sendCommand(inst.name, b.command);
+        }
+      };
+      row.appendChild(el);
+    });
+  }
+}
+/* 在控制台输出一行（命令回显/RCON 响应），并维持 2000 行上限与自动滚动 */
+function consoleAppend(text, cls) {
+  const box = document.getElementById("console");
+  if (!box) return;
+  const nearBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 40;
+  const d = document.createElement("div");
+  if (cls) d.className = cls;
+  d.textContent = text;
+  box.appendChild(d);
+  while (box.childNodes.length > 2000) box.removeChild(box.firstChild);
+  if (nearBottom) box.scrollTop = box.scrollHeight;
 }
 async function sendCommand(name, cmd) {
+  consoleAppend("> " + cmd, "cmd-echo");
   try {
     const r = await api(`/api/instances/${name}/command`, { method: "POST", body: { command: cmd } });
-    toast("响应: " + (r.response || "(空)"));
-  } catch (e) { toast(e.message, false); }
+    consoleAppend(r.response || "(无响应)", "cmd-resp");
+  } catch (e) { consoleAppend("错误: " + e.message, "cmd-err"); }
 }
 
 /* 配置 */
@@ -536,7 +566,9 @@ async function initBackupsTab(inst) {
     body.innerHTML = `
       <div class="row" style="margin-bottom:12px">
         <button class="primary small" id="mkBackup">立即备份</button>
-        <span class="hint">备份内容：存档与配置（tar.gz），保留最近 10 份；建议同时配置计划任务自动备份</span>
+        <button class="small" id="upBackup">上传备份</button>
+        <input type="file" id="upBackupFile" accept=".tar.gz" style="display:none">
+        <span class="hint">备份内容：存档与配置（tar.gz），保留最近 10 份；上传用于从其他服务器迁入存档，上传后点「恢复」</span>
       </div>
       ${list && list.length ? `<table><tr><th>文件</th><th>大小</th><th>时间</th><th>操作</th></tr>${rows}</table>` : '<div class="empty">暂无备份</div>'}`;
     document.getElementById("mkBackup").onclick = async () => {
@@ -544,6 +576,32 @@ async function initBackupsTab(inst) {
         const t = await api(`/api/instances/${inst.name}/backups`, { method: "POST" });
         openTaskModal(t.id, load);
       } catch (e) { toast(e.message, false); }
+    };
+    const upBtn = document.getElementById("upBackup");
+    const upInput = document.getElementById("upBackupFile");
+    upBtn.onclick = () => upInput.click();
+    upInput.onchange = () => {
+      const f = upInput.files[0];
+      if (!f) return;
+      const fd = new FormData();
+      fd.append("file", f, f.name);
+      const xhr = new XMLHttpRequest(); // fetch 无上传进度，大备份包需要进度反馈
+      xhr.open("POST", `/api/instances/${inst.name}/backups/upload`);
+      xhr.upload.onprogress = e => {
+        if (e.lengthComputable) upBtn.textContent = `上传中 ${Math.round(e.loaded / e.total * 100)}%`;
+      };
+      const reset = () => { upBtn.textContent = "上传备份"; upInput.value = ""; };
+      xhr.onload = () => {
+        reset();
+        if (xhr.status === 401) { S.authed = false; clearTimers(); renderLogin(); return; }
+        let resp = {};
+        try { resp = JSON.parse(xhr.responseText); } catch { /* 非 JSON 响应 */ }
+        if (xhr.status >= 200 && xhr.status < 300) { toast("已上传"); load(); }
+        else toast(resp.error || `上传失败 (${xhr.status})`, false);
+      };
+      xhr.onerror = () => { reset(); toast("上传网络错误", false); };
+      upBtn.textContent = "上传中 0%";
+      xhr.send(fd);
     };
     body.querySelectorAll("[data-restore]").forEach(b => b.onclick = async () => {
       if (!confirm(`确定从 ${b.dataset.restore} 恢复？当前存档将被覆盖，服务器会重启。`)) return;

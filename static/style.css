@@ -99,6 +99,9 @@ label { display: block; margin: 10px 0 4px; color: var(--text-dim); font-size: 1
   height: 440px; overflow-y: auto; padding: 10px 12px; white-space: pre-wrap; word-break: break-all;
 }
 .console .dim { color: #44515f; }
+.console .cmd-echo { color: var(--accent); }
+.console .cmd-resp { color: var(--green); }
+.console .cmd-err { color: var(--red); }
 .cmd-row { display: flex; gap: 8px; margin-top: 10px; }
 .cmd-row input { font-family: var(--mono); }
 
