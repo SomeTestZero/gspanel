@@ -19,6 +19,7 @@
                   ├─ Source RCON 客户端（控制台命令/优雅停机）
                   ├─ 游戏 REST API 客户端（Palworld 等 RCON 丢响应的游戏，查询/广播/踢禁走 REST）
                   ├─ 计划任务调度（定时重启/备份/更新）
+                  ├─ 版本轮询（实例开启自动更新后，每 30 分钟对比 Steam buildid；有玩家在线则广播等待，无玩家持续 10 分钟才更新）
                   └─ 监控（/proc + systemctl show，无外部 agent）
 ```
 

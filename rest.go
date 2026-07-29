@@ -72,6 +72,39 @@ func restExec(addr, password string, spec RESTCommandSpec, arg string) (string, 
 	return out, nil
 }
 
+// restPlayerCount 查询 format=players 的接口，返回原始在线人数（供自动更新的玩家门槛用）
+func restPlayerCount(addr, password string, spec RESTCommandSpec) (int, error) {
+	method := spec.Method
+	if method == "" {
+		method = http.MethodGet
+	}
+	req, err := http.NewRequest(method, "http://"+addr+spec.Path, nil)
+	if err != nil {
+		return 0, err
+	}
+	req.SetBasicAuth("admin", password)
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("REST API 请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return 0, err
+	}
+	if resp.StatusCode >= 400 {
+		return 0, fmt.Errorf("REST API 返回 HTTP %d", resp.StatusCode)
+	}
+	var v struct {
+		Players []json.RawMessage `json:"players"`
+	}
+	if err := json.Unmarshal(data, &v); err != nil {
+		return 0, fmt.Errorf("解析玩家列表失败: %w", err)
+	}
+	return len(v.Players), nil
+}
+
 // formatRESTPlayers 把 {"players":[{name,level,ping,userId,...}]} 格式化为易读列表
 func formatRESTPlayers(data []byte) string {
 	var v struct {

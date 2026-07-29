@@ -64,6 +64,7 @@ func (sv *Server) instanceView(inst *Instance) map[string]any {
 		"ports":         inst.Ports,
 		"args":          inst.Args,
 		"installed":     inst.Installed,
+		"auto_update":   inst.AutoUpdate,
 		"created_at":    inst.CreatedAt,
 		"schedules":     inst.Schedules,
 		"status":        st,
@@ -477,6 +478,7 @@ func (sv *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		DisplayName string   `json:"display_name"`
 		Args        []string `json:"args"`
+		AutoUpdate  *bool    `json:"auto_update"`
 	}
 	if !decodeJSON(w, r, &req) {
 		return
@@ -487,6 +489,9 @@ func (sv *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Args != nil {
 		inst.Args = req.Args
+	}
+	if req.AutoUpdate != nil {
+		inst.AutoUpdate = *req.AutoUpdate
 	}
 	err := sv.state.saveLocked()
 	sv.state.mu.Unlock()

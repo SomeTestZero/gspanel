@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -15,10 +16,21 @@ type Scheduler struct {
 	state *State
 	tasks *TaskManager
 	stop  chan struct{}
+
+	lastUpdateCheck time.Time   // 上次版本轮询时间
+	updateChecking  atomic.Bool // 防止上一轮检查未结束又开一轮
+	// 自动更新的玩家门槛状态（仅 checkUpdates goroutine 读写，无需锁）：
+	// 首次观察到无玩家的时间、上次广播通知时间
+	autoStates map[string]*autoUpdateState
+}
+
+type autoUpdateState struct {
+	emptySince time.Time
+	notifiedAt time.Time
 }
 
 func NewScheduler(state *State, tasks *TaskManager) *Scheduler {
-	return &Scheduler{state: state, tasks: tasks, stop: make(chan struct{})}
+	return &Scheduler{state: state, tasks: tasks, stop: make(chan struct{}), autoStates: map[string]*autoUpdateState{}}
 }
 
 func (sc *Scheduler) Start(sv *Server) {
@@ -60,6 +72,8 @@ func (sc *Scheduler) tick(sv *Server, now time.Time) {
 		inst := insts[sch.ID]
 		sv.runScheduled(inst, sch)
 	}
+
+	sc.maybeCheckUpdates(sv, now)
 }
 
 func scheduleDue(sch *Schedule, now time.Time) bool {

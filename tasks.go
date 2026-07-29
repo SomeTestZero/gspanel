@@ -153,6 +153,18 @@ func (m *TaskManager) Get(id string) *Task {
 	return nil
 }
 
+// HasRunningFor 该实例是否有正在运行的任务（版本轮询避免叠加更新任务）
+func (m *TaskManager) HasRunningFor(instance string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, t := range m.tasks {
+		if t.Instance == instance && t.Status == "running" {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *TaskManager) List() []*Task {
 	m.mu.Lock()
 	defer m.mu.Unlock()

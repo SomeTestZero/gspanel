@@ -39,6 +39,7 @@ type Instance struct {
 	// 因此每次启动前以此快照为准重新写入。
 	ConfigValues map[string]map[string]string `json:"config_values,omitempty"`
 	Installed    bool                         `json:"installed"`
+	AutoUpdate   bool                         `json:"auto_update,omitempty"` // 轮询检测到新版本时自动更新
 	Schedules     []*Schedule       `json:"schedules,omitempty"`
 	CreatedAt     time.Time         `json:"created_at"`
 }

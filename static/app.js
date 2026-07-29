@@ -695,6 +695,7 @@ function settingsTab(inst, tmpl) {
     </div>
     <label>启动参数（空格分隔，修改后重启生效）</label>
     <input id="setArgs" class="mono" value="${esc((inst.args || []).join(" "))}">
+    <div style="margin-top:10px"><label><input type="checkbox" id="setAutoUpdate" style="width:auto" ${inst.auto_update ? "checked" : ""}> 检测到新版本时自动更新（每 30 分钟轮询一次；有玩家在线时广播通知并等待，无玩家持续 10 分钟后才更新）</label></div>
     <div class="form-actions"><button class="primary small" id="setSave">保存</button></div>
   </div>
   <div class="card">
@@ -716,7 +717,7 @@ function initSettingsTab(inst, tmpl) {
   document.getElementById("setSave").onclick = async () => {
     const args = document.getElementById("setArgs").value.trim().split(/\s+/).filter(Boolean);
     try {
-      await api(`/api/instances/${inst.name}/settings`, { method: "PUT", body: { display_name: document.getElementById("setName").value, args } });
+      await api(`/api/instances/${inst.name}/settings`, { method: "PUT", body: { display_name: document.getElementById("setName").value, args, auto_update: document.getElementById("setAutoUpdate").checked } });
       toast("已保存");
     } catch (e) { toast(e.message, false); }
   };
