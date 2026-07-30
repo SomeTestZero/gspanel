@@ -73,6 +73,7 @@ func (sc *Scheduler) tick(sv *Server, now time.Time) {
 		sv.runScheduled(inst, sch)
 	}
 
+	sv.watchInstances()
 	sc.maybeCheckUpdates(sv, now)
 }
 
@@ -104,8 +105,7 @@ func (sv *Server) runScheduled(inst *Instance, sch *Schedule) {
 	if tmpl == nil {
 		return
 	}
-	desc := map[string]string{"restart": "定时重启", "backup": "定时备份", "update": "定时更新"}[sch.Kind]
-	sv.tasks.Run("scheduled-"+sch.Kind, inst.Name, desc, func(ctx context.Context, log io.Writer, t *Task) error {
+	sv.tasks.Run("scheduled-"+sch.Kind, inst.Name, scheduleDesc(sch), func(ctx context.Context, log io.Writer, t *Task) error {
 		switch sch.Kind {
 		case "backup":
 			_, err := createBackup(ctx, log, inst, tmpl, sch.Retention)

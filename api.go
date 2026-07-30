@@ -103,6 +103,7 @@ func (sv *Server) registerRoutes(mux *http.ServeMux) {
 	}))
 
 	mux.HandleFunc("GET /api/system", sv.auth(sv.handleSystem))
+	mux.HandleFunc("GET /api/events", sv.auth(sv.handleEvents))
 	mux.HandleFunc("POST /api/setup/steamcmd", sv.auth(sv.handleSetupSteamcmd))
 	mux.HandleFunc("POST /api/setup/deps", sv.auth(sv.handleSetupDeps))
 	mux.HandleFunc("POST /api/settings/password", sv.auth(sv.handleChangePassword))
@@ -217,6 +218,15 @@ func (sv *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleEvents 事件日志（时间线）：?instance=<名> 过滤，?limit=<n> 条数（默认 200，上限 eventKeep）
+func (sv *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
+	limit := 200
+	if v, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && v > 0 {
+		limit = min(v, eventKeep)
+	}
+	jsonOK(w, map[string]any{"events": sv.events.List(r.URL.Query().Get("instance"), limit)})
+}
+
 // handleSetPublicIP 手动覆盖公网地址（空字符串 = 恢复自动探测）
 func (sv *Server) handleSetPublicIP(w http.ResponseWriter, r *http.Request) {
 	var req struct {
@@ -241,6 +251,11 @@ func (sv *Server) handleSetPublicIP(w http.ResponseWriter, r *http.Request) {
 	sv.ipMu.Lock()
 	sv.ipCache, sv.ipCacheAt = "", time.Time{}
 	sv.ipMu.Unlock()
+	if v == "" {
+		sv.events.Add("", "network", "公网地址恢复为自动探测")
+	} else {
+		sv.events.Add("", "network", "手动设置公网地址为 %s", v)
+	}
 	jsonOK(w, map[string]any{"ok": true, "public_ip": sv.publicIP()})
 }
 
@@ -278,6 +293,7 @@ func (sv *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	sv.events.Add("", "password", "修改面板管理员密码")
 	jsonOK(w, map[string]any{"ok": true})
 }
 
@@ -350,6 +366,7 @@ func (sv *Server) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	sv.events.Add(inst.Name, "instance", "创建实例（模板 %s）", tmpl.Name)
 	jsonOK(w, sv.instanceView(inst))
 }
 
@@ -362,6 +379,11 @@ func (sv *Server) handleDeleteInstance(w http.ResponseWriter, r *http.Request) {
 	if err := sv.deleteInstance(inst, deleteFiles); err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if deleteFiles {
+		sv.events.Add(inst.Name, "instance", "删除实例（连同游戏文件与备份）")
+	} else {
+		sv.events.Add(inst.Name, "instance", "删除实例（保留文件）")
 	}
 	jsonOK(w, map[string]any{"ok": true})
 }
@@ -410,6 +432,7 @@ func (sv *Server) handleStart(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, "启动失败: "+out)
 		return
 	}
+	sv.events.Add(inst.Name, "start", "手动启动服务器")
 	jsonOK(w, map[string]any{"ok": true})
 }
 
@@ -483,21 +506,28 @@ func (sv *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
+	var changes []string
 	sv.state.mu.Lock()
-	if req.DisplayName != "" {
+	if req.DisplayName != "" && req.DisplayName != inst.DisplayName {
 		inst.DisplayName = req.DisplayName
+		changes = append(changes, "显示名称")
 	}
-	if req.Args != nil {
+	if req.Args != nil && strings.Join(req.Args, " ") != strings.Join(inst.Args, " ") {
 		inst.Args = req.Args
+		changes = append(changes, "启动参数")
 	}
-	if req.AutoUpdate != nil {
+	if req.AutoUpdate != nil && *req.AutoUpdate != inst.AutoUpdate {
 		inst.AutoUpdate = *req.AutoUpdate
+		changes = append(changes, fmt.Sprintf("自动更新=%v", *req.AutoUpdate))
 	}
 	err := sv.state.saveLocked()
 	sv.state.mu.Unlock()
 	if err != nil {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if len(changes) > 0 {
+		sv.events.Add(inst.Name, "settings", "修改实例设置：%s", strings.Join(changes, "、"))
 	}
 	if inst.Installed {
 		tmpl := sv.templateOf(inst)
@@ -719,6 +749,11 @@ func (sv *Server) handleWriteConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = sv.state.saveLocked()
 	sv.state.mu.Unlock()
+	if req.Raw != nil {
+		sv.events.Add(inst.Name, "config", "修改配置文件 %s（整文）", req.Path)
+	} else {
+		sv.events.Add(inst.Name, "config", "修改配置文件 %s（%d 项）", req.Path, len(req.Values))
+	}
 	jsonOK(w, map[string]any{"ok": true})
 }
 
@@ -814,6 +849,18 @@ func (sv *Server) handleDeleteBackup(w http.ResponseWriter, r *http.Request) {
 
 // ---------- 计划任务 ----------
 
+// scheduleDesc 计划任务的人类可读描述，如「定时备份（每天 04:30）」
+func scheduleDesc(sch *Schedule) string {
+	kind := map[string]string{"restart": "定时重启", "backup": "定时备份", "update": "定时更新"}[sch.Kind]
+	if kind == "" {
+		kind = sch.Kind
+	}
+	if sch.Type == "daily" {
+		return kind + "（每天 " + sch.Time + "）"
+	}
+	return fmt.Sprintf("%s（每 %d 小时）", kind, sch.Hours)
+}
+
 func (sv *Server) findSchedule(inst *Instance, id string) *Schedule {
 	for _, s := range inst.Schedules {
 		if s.ID == id {
@@ -860,6 +907,7 @@ func (sv *Server) handleAddSchedule(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	sv.events.Add(inst.Name, "schedule", "添加计划任务：%s", scheduleDesc(&sch))
 	jsonOK(w, &sch)
 }
 
@@ -890,6 +938,11 @@ func (sv *Server) handleUpdateSchedule(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	toggle := "禁用"
+	if sch.Enabled {
+		toggle = "启用"
+	}
+	sv.events.Add(inst.Name, "schedule", "%s计划任务：%s", toggle, scheduleDesc(sch))
 	jsonOK(w, sch)
 }
 
@@ -901,8 +954,10 @@ func (sv *Server) handleDeleteSchedule(w http.ResponseWriter, r *http.Request) {
 	sv.state.mu.Lock()
 	id := r.PathValue("id")
 	found := false
+	desc := ""
 	for i, s := range inst.Schedules {
 		if s.ID == id {
+			desc = scheduleDesc(s)
 			inst.Schedules = append(inst.Schedules[:i], inst.Schedules[i+1:]...)
 			found = true
 			break
@@ -921,5 +976,6 @@ func (sv *Server) handleDeleteSchedule(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	sv.events.Add(inst.Name, "schedule", "删除计划任务：%s", desc)
 	jsonOK(w, map[string]any{"ok": true})
 }

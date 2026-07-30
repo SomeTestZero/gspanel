@@ -145,6 +145,7 @@ function renderLayout(content) {
       ${instItems || '<div class="nav-item" style="cursor:default">暂无实例</div>'}
       <a class="nav-item ${S.route.page === "new" ? "active" : ""}" href="#/new">＋ 新建实例</a>
       <div class="nav-group">系统</div>
+      <a class="nav-item ${S.route.page === "events" ? "active" : ""}" href="#/events">事件日志</a>
       <a class="nav-item ${S.route.page === "tasks" ? "active" : ""}" href="#/tasks">后台任务</a>
       <a class="nav-item ${S.route.page === "settings" ? "active" : ""}" href="#/settings">设置 / 环境</a>
       <a class="nav-item" id="logoutBtn">退出登录</a>
@@ -811,6 +812,65 @@ async function renderNew() {
   document.getElementById("newCreateOnly").onclick = () => create(false);
 }
 
+/* ---------- 事件日志 ---------- */
+/* 事件类型的中文标签与徽章颜色 */
+function kindInfo(kind) {
+  const map = {
+    "start": ["启动", "green"], "stop": ["停止", "yellow"], "restart": ["重启", "blue"],
+    "crash": ["崩溃", "red"], "exit": ["退出", "red"], "failed": ["失败", "red"],
+    "auto-update": ["自动更新", "blue"], "update": ["更新", "blue"], "install": ["安装", "blue"],
+    "backup": ["备份", ""], "restore": ["恢复", ""], "new-world": ["新世界", "yellow"],
+    "scheduled-restart": ["定时重启", "blue"], "scheduled-backup": ["定时备份", "blue"], "scheduled-update": ["定时更新", "blue"],
+    "instance": ["实例", ""], "config": ["配置", ""], "settings": ["设置", ""], "schedule": ["计划", ""],
+    "password": ["安全", "yellow"], "network": ["网络", ""], "panel": ["面板", ""],
+    "setup-steamcmd": ["环境", ""], "setup-deps": ["环境", ""],
+  };
+  return map[kind] || [kind, ""];
+}
+
+async function renderEvents() {
+  const insts = await api("/api/instances");
+  if (S.route.page !== "events") return; // 竞态守卫
+  S.instances = insts;
+  const disp = {};
+  insts.forEach(i => disp[i.name] = i.display_name);
+  renderLayout(`<div class="page-title">事件日志</div>
+    <div class="card">
+      <div class="row" style="margin-bottom:12px">
+        <select id="evFilter" style="width:220px"><option value="">全部来源</option><option value="__panel">仅面板</option>
+          ${insts.map(i => `<option value="${esc(i.name)}">${esc(i.display_name)}（${esc(i.name)}）</option>`).join("")}</select>
+        <span class="hint" style="margin-top:0">启停、更新、备份、计划任务、异常退出等关键动作时间线（保留最近 500 条，每 10 秒刷新）</span>
+      </div>
+      <div id="evBody">加载中...</div>
+    </div>`);
+  let events = [];
+  const draw = () => {
+    const f = document.getElementById("evFilter").value;
+    const list = events.filter(e => f === "" ? true : (f === "__panel" ? !e.instance : e.instance === f));
+    const rows = list.map(e => {
+      const [label, color] = kindInfo(e.kind);
+      return `<tr>
+        <td class="mono" style="white-space:nowrap">${new Date(e.time).toLocaleString("zh-CN", { hour12: false })}</td>
+        <td>${e.instance ? esc(disp[e.instance] || e.instance) : '<span style="color:var(--text-dim)">面板</span>'}</td>
+        <td><span class="badge ${color}">${esc(label)}</span></td>
+        <td>${esc(e.message)}</td></tr>`;
+    }).join("");
+    document.getElementById("evBody").innerHTML = rows
+      ? `<table><tr><th>时间</th><th>来源</th><th>类型</th><th>事件</th></tr>${rows}</table>`
+      : '<div class="empty">暂无事件</div>';
+  };
+  const load = async () => {
+    let d;
+    try { d = await api("/api/events?limit=500"); } catch (e) { return; } // 网络抖动静默跳过本轮
+    if (S.route.page !== "events") return;
+    events = d.events || [];
+    draw();
+  };
+  document.getElementById("evFilter").onchange = draw;
+  await load();
+  addPoll(load, 10000);
+}
+
 /* ---------- 任务 ---------- */
 async function renderTasks() {
   const list = await api("/api/tasks");
@@ -963,6 +1023,7 @@ async function render() {
     if (page === "dashboard") await renderDashboard(seq);
     else if (page === "instance" && arg) await renderInstance(arg, arg2, seq);
     else if (page === "new") await renderNew();
+    else if (page === "events") await renderEvents();
     else if (page === "tasks") await renderTasks();
     else if (page === "settings") await renderSettings();
     else await renderDashboard(seq);

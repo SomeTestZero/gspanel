@@ -17,6 +17,7 @@ type Task struct {
 	Instance  string    `json:"instance,omitempty"`
 	Desc      string    `json:"desc"`
 	Status    string    `json:"status"` // running | success | failed | canceled
+	Err       string    `json:"error,omitempty"` // 失败原因
 	CreatedAt time.Time `json:"created_at"`
 	EndedAt   time.Time `json:"ended_at,omitempty"`
 
@@ -96,6 +97,9 @@ type TaskManager struct {
 	mu    sync.Mutex
 	tasks []*Task
 	seq   int
+	// 任务开始/结束回调（Server 用来写事件日志）
+	OnStart  func(t *Task)
+	OnFinish func(t *Task)
 }
 
 func NewTaskManager() *TaskManager {
@@ -121,6 +125,9 @@ func (m *TaskManager) Run(kind, instance, desc string, fn func(ctx context.Conte
 	}
 	m.mu.Unlock()
 
+	if m.OnStart != nil {
+		m.OnStart(t)
+	}
 	go func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		t.mu.Lock()
@@ -133,10 +140,16 @@ func (m *TaskManager) Run(kind, instance, desc string, fn func(ctx context.Conte
 			t.finish("canceled")
 		} else if err != nil {
 			t.logf("任务失败: %v", err)
+			t.mu.Lock()
+			t.Err = err.Error()
+			t.mu.Unlock()
 			t.finish("failed")
 		} else {
 			t.logf("任务完成")
 			t.finish("success")
+		}
+		if m.OnFinish != nil {
+			m.OnFinish(t)
 		}
 	}()
 	return t

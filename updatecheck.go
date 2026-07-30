@@ -82,7 +82,7 @@ func latestBuildID(appID int) (int64, error) {
 
 // autoUpdateReady 玩家门槛：有玩家在线则广播通知并等待，无人且持续 updateEmptyDelay 后才放行更新。
 // 仅在 checkUpdates 单 goroutine 内调用，直接读写 sc.autoStates。
-func (sc *Scheduler) autoUpdateReady(inst *Instance, tmpl *GameTemplate) bool {
+func (sc *Scheduler) autoUpdateReady(sv *Server, inst *Instance, tmpl *GameTemplate) bool {
 	if serviceStatus(inst).ActiveState != "active" {
 		return true // 服务器没开，不会有玩家
 	}
@@ -109,6 +109,7 @@ func (sc *Scheduler) autoUpdateReady(inst *Instance, tmpl *GameTemplate) bool {
 				log.Printf("自动更新检查 %s: 广播更新通知失败: %v", name, err)
 			} else {
 				st.notifiedAt = now
+				sv.events.Add(name, "auto-update", "检测到新版本，%d 名玩家在线，已广播通知，等待无人后自动更新", n)
 			}
 		}
 		log.Printf("自动更新检查 %s: %d 名玩家在线，推迟更新", name, n)
@@ -117,6 +118,7 @@ func (sc *Scheduler) autoUpdateReady(inst *Instance, tmpl *GameTemplate) bool {
 	if st.emptySince.IsZero() {
 		st.emptySince = now
 		log.Printf("自动更新检查 %s: 已无玩家，持续 %d 分钟无人后开始更新", name, int(updateEmptyDelay.Minutes()))
+		sv.events.Add(name, "auto-update", "检测到新版本，服务器已无玩家，持续 %d 分钟无人后开始自动更新", int(updateEmptyDelay.Minutes()))
 		return false
 	}
 	if now.Sub(st.emptySince) < updateEmptyDelay {
@@ -210,7 +212,7 @@ func (sc *Scheduler) checkUpdates(sv *Server) {
 		if latest <= local {
 			continue
 		}
-		if !sc.autoUpdateReady(tg.inst, tg.tmpl) {
+		if !sc.autoUpdateReady(sv, tg.inst, tg.tmpl) {
 			continue
 		}
 		delete(sc.autoStates, name)

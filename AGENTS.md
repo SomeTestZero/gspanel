@@ -17,7 +17,8 @@
 - 路径（main.go）：`BaseDir` 运行时取二进制所在目录（clone 位置随意，`data/`、`templates/`
   用户模板都跟随它）；游戏侧固定 `InstancesDir=/home/games/instances`、
   `BackupsDir=/home/games/backups`，游戏进程以 `games` 用户运行
-- 状态：全部在 `data/config.json`（密码哈希、实例、计划任务、会话）
+- 状态：实例/账号/计划任务在 `data/config.json`（密码哈希、实例、计划任务、会话），
+  事件日志（时间线）在 `data/events.jsonl`
 - 控制台日志：`/home/games/instances/<名>/logs/console.log`；面板日志 `journalctl -u gspanel -f`
 
 ## 构建 / 部署 / 验证
@@ -39,18 +40,19 @@ go vet ./...                                         # 无测试框架；临时�
 | 文件 | 职责 |
 |---|---|
 | main.go | 启动、常量、embed、Server 结构体 |
-| api.go | 全部 HTTP 路由/handler（认证、实例 CRUD、启停、控制台、配置读写、备份、计划任务） |
+| api.go | 全部 HTTP 路由/handler（认证、实例 CRUD、启停、控制台、配置读写、备份、计划任务、事件日志 `GET /api/events`）；各写操作成功后顺手记事件 |
 | auth.go | 会话 + 登录限流（10 分钟错 5 次锁 10 分钟） |
 | config.go | State 结构、config.json 读写、BindAddr |
+| events.go | 事件日志（时间线）：`EventLog` 持久化到 `data/events.jsonl`（每行一条 JSON，内存留 500 条，超 256KB 重写截断）；任务开始/结束经 `TaskManager.OnStart/OnFinish` 回调自动入日志；看门狗 `watchInstances`（scheduler tick 驱动，靠 `ActiveEnterTimestampMonotonic` 识别进程重启）检测**非面板发起**的退出：崩溃被 systemd 拉起→`crash`、自行退出→`exit`、failed→`failed`（面板操作以 `HasRunningFor`+2 分钟内事件排除误报）；前端「事件日志」页（侧栏，10 秒轮询，可按实例过滤） |
 | templates.go | 模板结构体、`LoadTemplates`、`validateTemplate`、URL 导入（导入即落盘 templates/） |
 | instance.go | 实例生命周期：创建（拷 DefaultArgs）、安装、种子配置、删除 |
 | systemctl.go | 生成 start.sh（`cd 实例目录 && exec 启动命令`）与 systemd unit |
 | steamcmd.go | steamcmd 安装/更新游戏、32 位依赖检测与安装（apt） |
 | rcon.go / rest.go | Source RCON 协议；游戏 REST 管理 API（Palworld RCON 丢响应的替代通道） |
 | configfile.go | 游戏配置读写，三种 format：`option-settings`（Palworld 专用就地替换）/ `kv` / `raw` |
-| tasks.go / stream.go | 后台任务（安装/更新/备份）+ SSE 日志订阅 |
-| scheduler.go | 计划任务（每日/间隔：重启、备份、更新）；`gracefulStop`：RCON 广播→存档→停；tick 里挂版本轮询入口 |
-| updatecheck.go | 版本轮询自动更新：实例开 `auto_update`（设置页开关，存 config.json）后，每 30 分钟用 api.steamcmd.net 查 public 分支 buildid 对比本地 `steamapps/appmanifest_<appid>.acf`，落后且实例无任务在跑（`HasRunningFor`）时更新。玩家门槛 `autoUpdateReady`：服务没开或模板无 `format=players` REST 命令→直接更；有玩家→广播通知（REST Broadcast 优先，每小时最多一次）并等待；无玩家持续 10 分钟（内存态 `autoStates`，面板重启重计）→才起 `auto-update` 任务走 `updateInstance` 流程（停→更→回写配置→拉起） |
+| tasks.go / stream.go | 后台任务（安装/更新/备份）+ SSE 日志订阅；`OnStart/OnFinish` 回调与 `Task.Err` 供事件日志记录任务始末 |
+| scheduler.go | 计划任务（每日/间隔：重启、备份、更新）；`gracefulStop`：RCON 广播→存档→停；tick 里挂版本轮询入口与看门狗 `watchInstances` |
+| updatecheck.go | 版本轮询自动更新：实例开 `auto_update`（设置页开关，存 config.json）后，每 30 分钟用 api.steamcmd.net 查 public 分支 buildid 对比本地 `steamapps/appmanifest_<appid>.acf`，落后且实例无任务在跑（`HasRunningFor`）时更新。玩家门槛 `autoUpdateReady`：服务没开或模板无 `format=players` REST 命令→直接更；有玩家→广播通知（REST Broadcast 优先，每小时最多一次）并等待；无玩家持续 10 分钟（内存态 `autoStates`，面板重启重计）→才起 `auto-update` 任务走 `updateInstance` 流程（停→更→回写配置→拉起）。广播通知与首次无玩家两个等待节点会写事件日志 |
 | backup.go / monitor.go / netinfo.go / util.go | 备份打包/恢复（恢复后按面板记录重写 ini 端口/密码/服务器名）/上传（跨服迁移存档：新机建同名模板实例→上传备份包或 deploy 放好 saves/→恢复）；/proc 资源监控；公网 IP 探测；chown 等杂项 |
 
 ## 模板系统（改动重灾区，坑都在这）

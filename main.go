@@ -45,7 +45,11 @@ type Server struct {
 	tasks     *TaskManager
 	monitor   *Monitor
 	sched     *Scheduler
+	events    *EventLog
 	http      *http.Server
+
+	watchMu sync.Mutex
+	watch   map[string]*watchState // 看门狗：各实例上次的进程启动时间戳与在/离线状态
 
 	ipMu      sync.Mutex
 	ipCache   string
@@ -89,7 +93,11 @@ func main() {
 		tasks:     tm,
 		monitor:   NewMonitor(state),
 		sched:     NewScheduler(state, tm),
+		events:    LoadEventLog(DataDir + "/events.jsonl"),
+		watch:     map[string]*watchState{},
 	}
+	tm.OnStart = s.onTaskStart
+	tm.OnFinish = s.onTaskFinish
 	s.monitor.Start()
 	s.sched.Start(s)
 
@@ -102,6 +110,7 @@ func main() {
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+	s.events.Add("", "panel", "面板已启动，监听 http://%s", addr)
 
 	go func() {
 		log.Printf("gspanel listening on http://%s", addr)

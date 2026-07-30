@@ -85,6 +85,7 @@ type ServiceStatus struct {
 	MemoryBytes   uint64 `json:"memory_bytes"`
 	CPUUsageNSec  uint64 `json:"cpu_usage_nsec"`
 	ExecStartOK   bool   `json:"unit_exists"`
+	ActiveEnterTs uint64 `json:"-"` // ActiveEnterTimestampMonotonic，看门狗据此识别进程（重）启动
 }
 
 func serviceStatus(inst *Instance) *ServiceStatus {
@@ -94,7 +95,7 @@ func serviceStatus(inst *Instance) *ServiceStatus {
 	}
 	st.ExecStartOK = true
 	out, err := systemctl("show", unitName(inst),
-		"-p", "ActiveState,SubState,MainPID,MemoryCurrent,CPUUsageNSec")
+		"-p", "ActiveState,SubState,MainPID,MemoryCurrent,CPUUsageNSec,ActiveEnterTimestampMonotonic")
 	if err != nil {
 		st.ActiveState = "unknown"
 		return st
@@ -114,6 +115,7 @@ func serviceStatus(inst *Instance) *ServiceStatus {
 	if v := props["CPUUsageNSec"]; v != "[not set]" {
 		st.CPUUsageNSec, _ = strconv.ParseUint(v, 10, 64)
 	}
+	st.ActiveEnterTs, _ = strconv.ParseUint(props["ActiveEnterTimestampMonotonic"], 10, 64)
 	return st
 }
 

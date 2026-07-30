@@ -20,12 +20,13 @@
                   ├─ 游戏 REST API 客户端（Palworld 等 RCON 丢响应的游戏，查询/广播/踢禁走 REST）
                   ├─ 计划任务调度（定时重启/备份/更新）
                   ├─ 版本轮询（实例开启自动更新后，每 30 分钟对比 Steam buildid；有玩家在线则广播等待，无玩家持续 10 分钟才更新）
+                  ├─ 事件日志（data/events.jsonl：启停/更新/备份/计划任务/异常退出时间线，侧栏「事件日志」页；看门狗识别非面板发起的进程退出）
                   └─ 监控（/proc + systemctl show，无外部 agent）
 ```
 
 - 游戏以 `games` 用户（uid 5）运行，实例目录 `/home/games/instances/<名>/`
 - 备份在 `/home/games/backups/<名>/`（tar.gz，保留策略按份数）
-- 所有状态在一个文件里：`面板目录/data/config.json`（无数据库）
+- 状态都在 `面板目录/data/`：`config.json`（账号/实例/计划任务）+ `events.jsonl`（事件日志），无数据库
 
 ## 新服务器安装
 
@@ -216,11 +217,11 @@ cp /tmp/cfg.bak /root/gspanel/data/config.json && systemctl restart gspanel
 ├── deploy.sh          # 幂等一键部署：裸机全装 / 已装只构建+重启面板，saves/ 自动就位
 ├── push-saves.sh      # 收各实例最新备份到 saves/ 作迁移种子（git 提交留人工）
 ├── saves/             # 迁移存档种子（<实例名>.tar.gz，每实例最新一份，git 跟踪）
-├── *.go               # 后端：main/config/auth/api/instance/systemctl/steamcmd/
+├── *.go               # 后端：main/config/auth/api/instance/systemctl/steamcmd/events/
 │                      #   rcon/tasks/scheduler/backup/monitor/configfile/templates/netinfo/util/stream
 ├── static/            # 前端（index.html / app.js / style.css，go:embed 内嵌）
 ├── templates/         # 游戏模板 JSON（内置+导入都在这里）
-└── data/config.json   # 全部状态（密码哈希、实例、计划任务，已 gitignore）
+└── data/              # 全部状态：config.json（密码哈希、实例、计划任务）+ events.jsonl（事件日志），已 gitignore
 
 /home/games/
 ├── steamcmd/          # steamcmd 本体
