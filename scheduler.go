@@ -222,8 +222,21 @@ func (sv *Server) newWorld(ctx context.Context, log io.Writer, inst *Instance, t
 	return nil
 }
 
-// updateInstance 停服 -> steamcmd validate -> 重新生成脚本/配置 -> 启动
+// updateInstance 预检版本（已是最新则不动服务器）-> 停服 -> steamcmd validate -> 重新生成脚本/配置 -> 启动。
+// 预检失败（查不到版本）时照旧更新：宁可白停一次，不可因第三方接口故障更不上。
 func (sv *Server) updateInstance(ctx context.Context, log io.Writer, inst *Instance, tmpl *GameTemplate) error {
+	if tmpl.SteamAppID > 0 {
+		if local, err := localBuildID(inst.Dir, tmpl.SteamAppID); err != nil {
+			fmt.Fprintf(log, "读取本地版本失败（%v），继续执行更新\n", err)
+		} else if latest, err := latestBuildID(tmpl.SteamAppID); err != nil {
+			fmt.Fprintf(log, "查询最新版本失败（%v），继续执行更新\n", err)
+		} else if latest <= local {
+			fmt.Fprintf(log, "当前已是最新版本（build %d），无需更新\n", local)
+			return nil
+		} else {
+			fmt.Fprintf(log, "发现新版本：build %d（当前 %d）\n", latest, local)
+		}
+	}
 	st := serviceStatus(inst)
 	wasRunning := st.ActiveState == "active"
 	if wasRunning {

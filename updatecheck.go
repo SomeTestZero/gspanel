@@ -221,7 +221,6 @@ func (sc *Scheduler) checkUpdates(sv *Server) {
 		sc.tasks.Run("auto-update", name,
 			fmt.Sprintf("自动更新 %s（新版本 build %d）", tmpl.Name, latest),
 			func(ctx context.Context, w io.Writer, t *Task) error {
-				fmt.Fprintf(w, "检测到新版本：build %d（当前 %d）\n", latest, local)
 				return sv.updateInstance(ctx, w, inst, tmpl)
 			})
 	}

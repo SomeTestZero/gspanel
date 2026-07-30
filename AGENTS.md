@@ -51,7 +51,7 @@ go vet ./...                                         # 无测试框架；临时�
 | rcon.go / rest.go | Source RCON 协议；游戏 REST 管理 API（Palworld RCON 丢响应的替代通道） |
 | configfile.go | 游戏配置读写，三种 format：`option-settings`（Palworld 专用就地替换）/ `kv` / `raw` |
 | tasks.go / stream.go | 后台任务（安装/更新/备份）+ SSE 日志订阅；`OnStart/OnFinish` 回调与 `Task.Err` 供事件日志记录任务始末 |
-| scheduler.go | 计划任务（每日/间隔：重启、备份、更新）；`gracefulStop`：RCON 广播→存档→停；tick 里挂版本轮询入口与看门狗 `watchInstances` |
+| scheduler.go | 计划任务（每日/间隔：重启、备份、更新）；`updateInstance`（手动/定时/自动更新共用入口）先比对 Steam buildid 预检，已最新则直接返回不停服（预检失败照旧更新）；`gracefulStop`：RCON 广播→存档→停；tick 里挂版本轮询入口与看门狗 `watchInstances` |
 | updatecheck.go | 版本轮询自动更新：实例开 `auto_update`（设置页开关，存 config.json）后，每 30 分钟用 api.steamcmd.net 查 public 分支 buildid 对比本地 `steamapps/appmanifest_<appid>.acf`，落后且实例无任务在跑（`HasRunningFor`）时更新。玩家门槛 `autoUpdateReady`：服务没开或模板无 `format=players` REST 命令→直接更；有玩家→广播通知（REST Broadcast 优先，每小时最多一次）并等待；无玩家持续 10 分钟（内存态 `autoStates`，面板重启重计）→才起 `auto-update` 任务走 `updateInstance` 流程（停→更→回写配置→拉起）。广播通知与首次无玩家两个等待节点会写事件日志 |
 | backup.go / monitor.go / netinfo.go / util.go | 备份打包/恢复（恢复后按面板记录重写 ini 端口/密码/服务器名）/上传（跨服迁移存档：新机建同名模板实例→上传备份包或 deploy 放好 saves/→恢复）；/proc 资源监控；公网 IP 探测；chown 等杂项 |
 

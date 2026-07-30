@@ -350,7 +350,7 @@ async function renderInstance(name, tab, seq) {
   bind("iStop", () => instanceAction(name, "stop"));
   bind("iRestart", () => instanceAction(name, "restart"));
   bind("iUpdate", async () => {
-    if (!confirm("更新会短暂停服，继续？")) return;
+    if (!confirm("将先检查是否有新版本，有则短暂停服更新，继续？")) return;
     try {
       const task = await api(`/api/instances/${name}/update`, { method: "POST" });
       openTaskModal(task.id);
