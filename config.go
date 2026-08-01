@@ -54,6 +54,8 @@ type State struct {
 	Bind         string `json:"bind"`
 	Port         int    `json:"port"`
 	PublicIP     string `json:"public_ip,omitempty"` // 手动覆盖公网地址，留空自动探测
+	SyncTarget   string `json:"sync_target,omitempty"` // 已废弃：单目标旧字段，加载时迁移进 SyncTargets
+	SyncTargets  []string `json:"sync_targets,omitempty"` // 备份异地同步 SSH 目标列表（如 yecao2、user@host），空=关闭
 	PasswordSalt string `json:"password_salt"`
 	PasswordHash string `json:"password_hash"`
 	Instances    map[string]*Instance `json:"instances"`
@@ -109,6 +111,11 @@ func LoadState(path string) (*State, string, error) {
 	}
 	if s.Sessions == nil {
 		s.Sessions = map[string]time.Time{}
+	}
+	// 旧单目标字段迁移为多目标列表
+	if s.SyncTarget != "" {
+		s.SyncTargets = append(s.SyncTargets, s.SyncTarget)
+		s.SyncTarget = ""
 	}
 	// 清理过期会话
 	for t, exp := range s.Sessions {

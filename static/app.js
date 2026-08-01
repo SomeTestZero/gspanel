@@ -535,6 +535,7 @@ async function initConfigTab(inst, tmpl) {
     ).join("");
     cb.innerHTML = `${fields}
       <div class="form-actions"><button class="primary" id="cfgSave">保存配置</button>
+      <button class="danger" id="cfgReset">恢复默认</button>
       ${restartNowHtml}<span class="hint">未勾选则下次启动生效</span></div>`;
     document.getElementById("cfgSave").onclick = async () => {
       const values = {};
@@ -542,6 +543,26 @@ async function initConfigTab(inst, tmpl) {
       try {
         await api(`/api/instances/${inst.name}/config`, { method: "PUT", body: { path, values } });
         toast("已保存");
+        await afterSave();
+      } catch (e) { toast(e.message, false); }
+    };
+    // 恢复默认：有声明 default 的项重置为模板默认值，其余（密码、开关等）保持当前值；
+    // 仍需提交全部键，保证服务端配置快照完整（启动前按快照写回）
+    document.getElementById("cfgReset").onclick = async () => {
+      if (!confirm("将各配置项恢复为模板默认值并立即保存？\n\n注：仅重置声明了默认值的项；未声明默认值的项（如密码、开关）保持当前值。")) return;
+      const specOf = {};
+      data.schema.forEach(f => specOf[f.key] = f);
+      const values = {};
+      cb.querySelectorAll("[data-key]").forEach(el => {
+        const f = specOf[el.dataset.key];
+        values[el.dataset.key] = f && f.default !== undefined
+          ? (f.type === "bool" ? (String(f.default).toLowerCase() === "true" || f.default === 1 ? "True" : "False") : String(f.default))
+          : el.value;
+      });
+      try {
+        await api(`/api/instances/${inst.name}/config`, { method: "PUT", body: { path, values } });
+        cb.querySelectorAll("[data-key]").forEach(el => el.value = values[el.dataset.key]);
+        toast("已恢复默认配置");
         await afterSave();
       } catch (e) { toast(e.message, false); }
     };
@@ -966,6 +987,14 @@ async function renderSettings() {
       <div class="hint">自动探测优先读云厂商元数据，失败则走公网探测服务；使用 DDNS/域名时建议在此手动覆盖。</div>
     </div>
     <div class="card">
+      <h3>备份异地同步</h3>
+      <div class="form-row">
+        <div><label>SSH 目标（主机别名或 user@host，多个用逗号分隔，留空=关闭）</label><input id="syncTarget" value="${esc((sys.sync_targets || []).join(", "))}" placeholder="关闭"></div>
+      </div>
+      <div class="form-actions"><button class="primary small" id="syncTargetSave">保存</button></div>
+      <div class="hint">每次备份（手动/定时）成功后，自动用 rsync 把最新备份包推送到各目标主机的 ~/gspanel-saves/，远端只保留最新一份。需本机（root）已配置到目标主机的 SSH 免密登录；任一目标同步失败都会让备份任务标记为失败并写入事件日志。</div>
+    </div>
+    <div class="card">
       <h3>修改管理员密码</h3>
       <div class="form-row">
         <div><label>原密码</label><input type="password" id="oldPw"></div>
@@ -992,6 +1021,14 @@ async function renderSettings() {
     try {
       const r = await api("/api/settings/public-ip", { method: "POST", body: { public_ip: document.getElementById("pubIpOverride").value.trim() } });
       toast("已保存，生效地址: " + (r.public_ip || "获取失败"));
+      renderSettings();
+    } catch (e) { toast(e.message, false); }
+  };
+  document.getElementById("syncTargetSave").onclick = async () => {
+    try {
+      const targets = document.getElementById("syncTarget").value.split(/[,，\s]+/).filter(Boolean);
+      const r = await api("/api/settings/sync-target", { method: "POST", body: { sync_targets: targets } });
+      toast(r.sync_targets.length ? "已保存，备份后将同步到 " + r.sync_targets.join(", ") : "已关闭备份异地同步");
       renderSettings();
     } catch (e) { toast(e.message, false); }
   };

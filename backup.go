@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -48,6 +49,53 @@ func listBackups(inst *Instance) ([]BackupInfo, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Created.After(out[j].Created) })
 	return out, nil
+}
+
+var syncTargetRe = regexp.MustCompile(`^[a-zA-Z0-9_.-]+(@[a-zA-Z0-9_.-]+)?$`)
+
+// backupAndSync createBackup 成功后，若配置了 sync_target 则把新备份推送到远端；
+// 同步失败视为任务失败（本地备份已保留），让异地备份失效能在事件日志里暴露
+func (sv *Server) backupAndSync(ctx context.Context, log io.Writer, inst *Instance, tmpl *GameTemplate, retention int) error {
+	name, err := createBackup(ctx, log, inst, tmpl, retention)
+	if err != nil {
+		return err
+	}
+	sv.state.mu.RLock()
+	targets := append([]string(nil), sv.state.SyncTargets...)
+	sv.state.mu.RUnlock()
+	if len(targets) == 0 {
+		return nil
+	}
+	// 逐目标推送：某个目标失败不影响其他目标，但汇总报错让任务失败、进事件日志
+	var failed []string
+	for _, target := range targets {
+		fmt.Fprintf(log, "同步备份到 %s ...\n", target)
+		if err := syncBackup(ctx, log, inst, name, target); err != nil {
+			fmt.Fprintf(log, "同步到 %s 失败: %v\n", target, err)
+			failed = append(failed, target)
+		}
+	}
+	if len(failed) > 0 {
+		return fmt.Errorf("备份已完成，但同步到 %s 失败", strings.Join(failed, ", "))
+	}
+	return nil
+}
+
+// syncBackup 用 rsync 把备份包推到远端固定文件名 <实例>-latest.tar.gz（远端只留最新一份）
+func syncBackup(ctx context.Context, log io.Writer, inst *Instance, file, target string) error {
+	mkdir := newCancellableCmd(ctx, "ssh", "-o", "BatchMode=yes", target, "mkdir -p ~/gspanel-saves")
+	mkdir.Stdout, mkdir.Stderr = log, log
+	if err := mkdir.Run(); err != nil {
+		return fmt.Errorf("ssh 连接失败: %w", err)
+	}
+	rsync := newCancellableCmd(ctx, "rsync", "-az", "-e", "ssh -o BatchMode=yes",
+		backupDir(inst)+"/"+file, target+":gspanel-saves/"+inst.Name+"-latest.tar.gz")
+	rsync.Stdout, rsync.Stderr = log, log
+	if err := rsync.Run(); err != nil {
+		return fmt.Errorf("rsync 失败: %w", err)
+	}
+	fmt.Fprintf(log, "已同步为 %s:gspanel-saves/%s-latest.tar.gz\n", target, inst.Name)
+	return nil
 }
 
 // createBackup 打包模板声明的 backup_paths；running 时给出一致性提示

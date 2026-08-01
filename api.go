@@ -108,6 +108,7 @@ func (sv *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/setup/deps", sv.auth(sv.handleSetupDeps))
 	mux.HandleFunc("POST /api/settings/password", sv.auth(sv.handleChangePassword))
 	mux.HandleFunc("POST /api/settings/public-ip", sv.auth(sv.handleSetPublicIP))
+	mux.HandleFunc("POST /api/settings/sync-target", sv.auth(sv.handleSetSyncTarget))
 
 	mux.HandleFunc("GET /api/templates", sv.auth(sv.handleTemplates))
 	mux.HandleFunc("POST /api/templates/import", sv.auth(sv.handleImportTemplate))
@@ -206,6 +207,7 @@ func (sv *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 func (sv *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 	sv.state.mu.RLock()
 	override := sv.state.PublicIP
+	syncTargets := append([]string(nil), sv.state.SyncTargets...)
 	sv.state.mu.RUnlock()
 	jsonOK(w, map[string]any{
 		"stats":              ReadSystemStats(),
@@ -214,6 +216,7 @@ func (sv *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 		"base_dir":           BaseDir,
 		"public_ip":          sv.publicIP(),
 		"public_ip_override": override,
+		"sync_targets":       syncTargets,
 		"version":            "1.0.0",
 	})
 }
@@ -257,6 +260,44 @@ func (sv *Server) handleSetPublicIP(w http.ResponseWriter, r *http.Request) {
 		sv.events.Add("", "network", "手动设置公网地址为 %s", v)
 	}
 	jsonOK(w, map[string]any{"ok": true, "public_ip": sv.publicIP()})
+}
+
+// handleSetSyncTarget 设置备份异地同步的 SSH 目标列表（空数组 = 关闭）
+func (sv *Server) handleSetSyncTarget(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		SyncTargets []string `json:"sync_targets"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	var targets []string
+	seen := map[string]bool{}
+	for _, t := range req.SyncTargets {
+		t = strings.TrimSpace(t)
+		if t == "" || seen[t] {
+			continue
+		}
+		if !syncTargetRe.MatchString(t) {
+			jsonError(w, http.StatusBadRequest, "非法目标 "+t+"：须为 SSH 目标（主机别名或 user@host）")
+			return
+		}
+		seen[t] = true
+		targets = append(targets, t)
+	}
+	sv.state.mu.Lock()
+	sv.state.SyncTargets = targets
+	err := sv.state.saveLocked()
+	sv.state.mu.Unlock()
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if len(targets) == 0 {
+		sv.events.Add("", "settings", "关闭备份异地同步")
+	} else {
+		sv.events.Add("", "settings", "备份异地同步目标设为 %s", strings.Join(targets, ", "))
+	}
+	jsonOK(w, map[string]any{"ok": true, "sync_targets": targets})
 }
 
 func (sv *Server) handleSetupSteamcmd(w http.ResponseWriter, r *http.Request) {
@@ -779,8 +820,7 @@ func (sv *Server) handleCreateBackup(w http.ResponseWriter, r *http.Request) {
 	}
 	tmpl := sv.templateOf(inst)
 	t := sv.tasks.Run("backup", inst.Name, "备份 "+inst.DisplayName, func(ctx context.Context, log io.Writer, task *Task) error {
-		_, err := createBackup(ctx, log, inst, tmpl, 10)
-		return err
+		return sv.backupAndSync(ctx, log, inst, tmpl, 10)
 	})
 	jsonOK(w, t)
 }

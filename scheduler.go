@@ -108,8 +108,7 @@ func (sv *Server) runScheduled(inst *Instance, sch *Schedule) {
 	sv.tasks.Run("scheduled-"+sch.Kind, inst.Name, scheduleDesc(sch), func(ctx context.Context, log io.Writer, t *Task) error {
 		switch sch.Kind {
 		case "backup":
-			_, err := createBackup(ctx, log, inst, tmpl, sch.Retention)
-			return err
+			return sv.backupAndSync(ctx, log, inst, tmpl, sch.Retention)
 		case "restart":
 			return sv.gracefulRestart(ctx, log, inst, tmpl)
 		case "update":

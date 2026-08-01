@@ -20,6 +20,11 @@
 - 状态：实例/账号/计划任务在 `data/config.json`（密码哈希、实例、计划任务、会话），
   事件日志（时间线）在 `data/events.jsonl`
 - 控制台日志：`/home/games/instances/<名>/logs/console.log`；面板日志 `journalctl -u gspanel -f`
+- 异地备份：设置页「备份异地同步」配 `sync_targets`（SSH 目标列表，存 config.json，空=关闭；
+  旧单目标字段 `sync_target` 加载时自动迁移）后，每次备份（手动/定时）成功自动 rsync 到
+  `目标:~/gspanel-saves/<实例>-latest.tar.gz`（远端只留最新一份，固定文件名覆盖）；
+  任一目标同步失败则备份任务判失败、进事件日志（单个失败不影响其他目标）。
+  依赖面板机 root 到目标主机的免密 SSH（当前配的是 yecao2 + yecao 两台）
 
 ## 构建 / 部署 / 验证
 
@@ -53,7 +58,7 @@ go vet ./...                                         # 无测试框架；临时�
 | tasks.go / stream.go | 后台任务（安装/更新/备份）+ SSE 日志订阅；`OnStart/OnFinish` 回调与 `Task.Err` 供事件日志记录任务始末 |
 | scheduler.go | 计划任务（每日/间隔：重启、备份、更新）；`updateInstance`（手动/定时/自动更新共用入口）先比对 Steam buildid 预检，已最新则直接返回不停服（预检失败照旧更新）；`gracefulStop`：RCON 广播→存档→停；tick 里挂版本轮询入口与看门狗 `watchInstances` |
 | updatecheck.go | 版本轮询自动更新：实例开 `auto_update`（设置页开关，存 config.json）后，每 30 分钟用 api.steamcmd.net 查 public 分支 buildid 对比本地 `steamapps/appmanifest_<appid>.acf`，落后且实例无任务在跑（`HasRunningFor`）时更新。玩家门槛 `autoUpdateReady`：服务没开或模板无 `format=players` REST 命令→直接更；有玩家→广播通知（REST Broadcast 优先，每小时最多一次）并等待；无玩家持续 10 分钟（内存态 `autoStates`，面板重启重计）→才起 `auto-update` 任务走 `updateInstance` 流程（停→更→回写配置→拉起）。广播通知与首次无玩家两个等待节点会写事件日志 |
-| backup.go / monitor.go / netinfo.go / util.go | 备份打包/恢复（恢复后按面板记录重写 ini 端口/密码/服务器名）/上传（跨服迁移存档：新机建同名模板实例→上传备份包或 deploy 放好 saves/→恢复）；/proc 资源监控；公网 IP 探测；chown 等杂项 |
+| backup.go / monitor.go / netinfo.go / util.go | 备份打包/恢复（恢复后按面板记录重写 ini 端口/密码/服务器名）/上传（跨服迁移存档：新机建同名模板实例→上传备份包或 deploy 放好 saves/→恢复）；`backupAndSync`（手动/定时备份共用入口）备份成功后按 `sync_targets` 列表逐目标 rsync 异地同步（`syncBackup`，远端只留最新一份）；/proc 资源监控；公网 IP 探测；chown 等杂项 |
 
 ## 模板系统（改动重灾区，坑都在这）
 
