@@ -104,8 +104,7 @@ func (sc *Scheduler) autoUpdateReady(sv *Server, inst *Instance, tmpl *GameTempl
 	if n > 0 {
 		st.emptySince = time.Time{}
 		if now.Sub(st.notifiedAt) >= updateNotifyInterval {
-			if err := broadcastMessage(inst, tmpl,
-				fmt.Sprintf("服务器检测到新版本，将在无玩家%d分钟后自动更新重启，请合理安排游戏时间", int(updateEmptyDelay.Minutes()))); err != nil {
+			if err := broadcastMessage(inst, tmpl, "服务器检测到新版本，将在无玩家游玩后自动更新。"); err != nil {
 				log.Printf("自动更新检查 %s: 广播更新通知失败: %v", name, err)
 			} else {
 				st.notifiedAt = now
