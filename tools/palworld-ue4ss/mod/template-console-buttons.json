@@ -1,0 +1,12 @@
+[
+  { "label": "在线玩家", "command": "ShowPlayers" },
+  { "label": "服务器信息", "command": "Info" },
+  { "label": "性能指标", "command": "Metrics" },
+  { "label": "立即存档", "command": "Save" },
+  { "label": "广播…", "command": "Broadcast", "prompt": "广播内容:" },
+  { "label": "踢出玩家…", "command": "KickPlayer", "prompt": "输入要踢出的玩家 userid（点「在线玩家」可查看，steam_ 开头）:" },
+  { "label": "封禁玩家…", "command": "BanPlayer", "prompt": "警告：封禁后该玩家无法再加入！\n输入要封禁的玩家 userid（steam_ 开头）:" },
+  { "label": "在线玩家(扩展)", "command": "gspwho" },
+  { "label": "给物品…(需 UE4SS)", "command": "give", "prompt": "格式: 玩家名/UID/SteamID 物品ID 数量\n例如: some_test0 Wood 100" },
+  { "label": "给经验…(需 UE4SS)", "command": "giveexp", "prompt": "格式: 玩家名/UID/SteamID 经验值\n例如: some_test0 5000" }
+]

@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -85,7 +86,94 @@ func (sv *Server) instanceView(inst *Instance) map[string]any {
 		}
 		view["public_ports"] = pp
 	}
+	view["has_give_mod"] = hasGiveMod(inst)
 	return view
+}
+
+// ---------- Palworld 扩展命令（UE4SS mod 文件队列） ----------
+
+// modQueueDir：游戏进程 cwd 是 Pal/Binaries/Linux（Palworld 启动后会切过去）
+func modQueueDir(inst *Instance) string {
+	return inst.Dir + "/Pal/Binaries/Linux/gspanel-mod"
+}
+
+// hasGiveMod：实例是否装了 gspanel 扩展命令 mod
+func hasGiveMod(inst *Instance) bool {
+	if _, err := os.Stat(inst.Dir + "/Pal/Binaries/Linux/Mods/gspanel/scripts/main.lua"); err != nil {
+		return false
+	}
+	st, err := os.Stat(modQueueDir(inst))
+	return err == nil && st.IsDir()
+}
+
+var modCmdMu sync.Mutex
+
+func (sv *Server) handleModCommand(w http.ResponseWriter, r *http.Request) {
+	inst := sv.getInstance(w, r)
+	if inst == nil {
+		return
+	}
+	if !hasGiveMod(inst) {
+		jsonError(w, http.StatusBadRequest, "该实例未安装 gspanel 扩展命令 mod")
+		return
+	}
+	var req struct {
+		Verb string   `json:"verb"`
+		Args []string `json:"args"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	switch req.Verb {
+	case "who", "give", "giveexp":
+	default:
+		jsonError(w, http.StatusBadRequest, "不支持的命令: "+req.Verb)
+		return
+	}
+	for _, a := range req.Args {
+		if strings.ContainsAny(a, "\r\n") {
+			jsonError(w, http.StatusBadRequest, "参数不能包含换行")
+			return
+		}
+	}
+	dir := modQueueDir(inst)
+	if err := mkdirForGames(dir); err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	modCmdMu.Lock()
+	defer modCmdMu.Unlock()
+	resPath := dir + "/res.txt"
+	_ = os.Remove(resPath)
+	content := req.Verb + "\n" + strings.Join(req.Args, "\n") + "\n"
+	tmp := dir + "/cmd.txt.tmp"
+	if err := os.WriteFile(tmp, []byte(content), 0644); err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := chownToGames(tmp); err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := os.Rename(tmp, dir+"/cmd.txt"); err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	deadline := time.Now().Add(8 * time.Second)
+	for time.Now().Before(deadline) {
+		if data, err := os.ReadFile(resPath); err == nil && len(data) > 0 {
+			txt := strings.TrimSpace(string(data))
+			lines := strings.SplitN(txt, "\n", 2)
+			msg := ""
+			if len(lines) > 1 {
+				msg = strings.TrimSpace(lines[1])
+			}
+			jsonOK(w, map[string]any{"ok": lines[0] == "OK", "message": msg})
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	jsonError(w, http.StatusGatewayTimeout, "mod 未在 8 秒内响应（游戏是否在运行？）")
 }
 
 func (sv *Server) registerRoutes(mux *http.ServeMux) {
@@ -132,6 +220,7 @@ func (sv *Server) registerRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("GET /api/instances/{name}/console/stream", sv.auth(sv.handleConsoleStream))
 	mux.HandleFunc("POST /api/instances/{name}/command", sv.auth(sv.handleCommand))
+	mux.HandleFunc("POST /api/instances/{name}/mod-command", sv.auth(sv.handleModCommand))
 
 	mux.HandleFunc("GET /api/instances/{name}/config", sv.auth(sv.handleReadConfig))
 	mux.HandleFunc("PUT /api/instances/{name}/config", sv.auth(sv.handleWriteConfig))
@@ -469,7 +558,7 @@ func (sv *Server) handleStart(w http.ResponseWriter, r *http.Request) {
 	if fi, err := os.Stat(logFile); err == nil && fi.Size() > 50<<20 {
 		truncateLog(logFile, 1<<20)
 	}
-	if out, err := systemctl("start", unitName(inst)); err != nil {
+	if out, err := systemctlPriv("start", inst); err != nil {
 		jsonError(w, http.StatusInternalServerError, "启动失败: "+out)
 		return
 	}

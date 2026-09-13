@@ -1,0 +1,44 @@
+fix(linux): support Palworld 1.0.4 stripped binary on native Linux
+
+Palworld 1.0.4 (Steam buildid 25080279) 的 PalServer-Linux-Shipping 是 stripped
+非 PIE ELF；上游 Linux 端口在其上要么启动即 SIGSEGV，要么进入 full mode 后崩。
+本提交修复以下问题（全部在原生 Linux 服务端实测通过，完整初始化 + Lua mod 可用）：
+
+GUObjectArray
+- 强化候选校验：必须位于主程序可写段（.bss），遍历 chunk 0 前 8 项校验
+  vtable 位于主程序只读段、UObjectBase::InternalIndex == 下标
+- max_elements 上限 10,000,000 → 1<<30（真实值 33,619,968 会被旧上限过滤），
+  max_chunks 10,000 → 65,536
+- 跳过只会命中假地址（栈/堆）的堆内存扫描
+
+GMalloc
+- 改用导出 vtable 锚点：dlsym("_ZTV<FMallocXxx>") + 0x10 作为 vptr 集合，
+  在主程序 .bss 反查指向该 vptr 的全局指针（1.0.4 命中 FMallocBinned2）
+
+FMalloc vtable 布局
+- 基类虚函数槽数 1 → 2（Malloc 偏移 0x10 → 0x18，QuantizeSize 0x38 → 0x40）
+
+bit_cast_mfp (UnrealVirtualBaseVC.hpp)
+- union 零初始化：Itanium ABI 成员函数指针的第二个字是 this 调整量，
+  未初始化会让所有虚调用执行 this += 栈垃圾
+
+FName
+- 新增 patternsleuth 风格的 Linux 解析器定位 FName::FName
+  （Engine/Renderer/AnimGraphRuntime/Landscape/RenderCore 五个 UTF-16 字符串
+  的引用处附近找 `BA 01 00 00 00 E8` call，取调用目标交集）
+- 新增 FName::ToString 解析器（SkySphereMesh 引用 + 特征指令序列）
+- Linux 下按 Itanium ABI 显式传 this/输出指针调用构造函数
+  （Function<> 原按“自由函数返回 FName”调用，会把字符串当 this、
+   把 EFindName 当字符串指针）
+
+UObject 遍历
+- ForEachUObject_Chunked/_ChunkedInRange 改为按全局索引只遍历到 NumElements，
+  并加对象指针范围防御。原实现对每个 chunk 都遍历 65536 项，会读到最后一个
+  chunk 里 NumElements 之后未初始化的内存，FindAllOf 因此段错误
+
+CMake
+- FILE_SET 需要 CMake >= 3.23，为 3.22 增加兼容分支（Ubuntu 22.04 自带 3.22）
+
+验证环境：Ubuntu 22.04 / glibc 2.35 / gcc-13，steamcmd 安装的 Palworld
+Dedicated Server v1.0.4.102642。已验证 FindAllOf / FindFirstOf / GetFullName /
+StaticFindObject / ForEachUObject(154,583 objects) 与 Lua mod 加载。

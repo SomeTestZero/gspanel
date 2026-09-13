@@ -1,0 +1,637 @@
+diff --git a/UE4SS/CMakeLists.txt b/UE4SS/CMakeLists.txt
+index 22dd1d0..859cd4d 100644
+--- a/UE4SS/CMakeLists.txt
++++ b/UE4SS/CMakeLists.txt
+@@ -124,12 +124,16 @@ if(NOT WIN32)
+     target_compile_definitions(UE4SS PUBLIC FORCE_U16)
+ endif()
+ 
+-# Add headers as sources for IDE integration
+-target_sources(UE4SS PUBLIC
+-    FILE_SET ue4ss_headers TYPE HEADERS
+-    BASE_DIRS include
+-    FILES ${UE4SS_HEADERS}
+-)
++# Add headers as sources for IDE integration (FILE_SET requires CMake >= 3.23)
++if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.23")
++    target_sources(UE4SS PUBLIC
++        FILE_SET ue4ss_headers TYPE HEADERS
++        BASE_DIRS include
++        FILES ${UE4SS_HEADERS}
++    )
++else()
++    target_sources(UE4SS PUBLIC ${UE4SS_HEADERS})
++endif()
+ 
+ # Organize in IDE
+ source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${UE4SS_SOURCES} ${UE4SS_HEADERS})
+diff --git a/UE4SS/src/UE4SSProgram.cpp b/UE4SS/src/UE4SSProgram.cpp
+index 9aa81b7..85e3a42 100644
+--- a/UE4SS/src/UE4SSProgram.cpp
++++ b/UE4SS/src/UE4SSProgram.cpp
+@@ -33,6 +33,7 @@
+ #include <thread>
+ #include <unordered_set>
+ #include <set>
++#include <unordered_map>
+ #include <vector>
+ #include <fmt/chrono.h>
+ #include <Profiler/Profiler.hpp>
+@@ -1404,6 +1405,141 @@ namespace RC
+                 return ptr;
+             };
+ 
++            // ---------- Palworld stripped 二进制专用解析器（2026-09 新增） ----------
++            // 1) FName::FName：patternsleuth 的 Linux 思路——
++            //    用 Engine/Renderer/AnimGraphRuntime/Landscape/RenderCore 五个 UTF-16 字符串，
++            //    找引用它们的指令，再在附近找 `BA 01 00 00 00 E8`（mov edx,1; call FName::FName），
++            //    五个字符串的调用目标交集就是 FName 构造器。
++            // 2) FName::ToString：找 "SkySphereMesh\0" 的引用，再找
++            //    `E8 ?? ?? ?? ?? 49 8B 5F 10 48 8D 7C 24 30 BE <str_imm32>` 里的 call。
++            struct LinuxMainSeg { uint8_t* start; size_t size; bool writable; bool exec; };
++            auto linux_main_segments = []() -> std::vector<LinuxMainSeg> {
++                std::vector<LinuxMainSeg> segs;
++                dl_iterate_phdr([](struct dl_phdr_info* info, size_t, void* data) -> int {
++                    auto* out = static_cast<std::vector<LinuxMainSeg>*>(data);
++                    const char* nm = info->dlpi_name;
++                    bool is_main = (!nm || nm[0] == '\0');
++                    if (!is_main && nm && strstr(nm, "PalServer-Linux-Shipping")) is_main = true;
++                    if (!is_main) return 0;
++                    for (int i = 0; i < info->dlpi_phnum; i++) {
++                        const ElfW(Phdr)* phdr = &info->dlpi_phdr[i];
++                        if (phdr->p_type != PT_LOAD) continue;
++                        uint8_t* s = reinterpret_cast<uint8_t*>(info->dlpi_addr + phdr->p_vaddr);
++                        out->push_back({s, static_cast<size_t>(phdr->p_filesz),
++                                        (phdr->p_flags & PF_W) != 0, (phdr->p_flags & PF_X) != 0});
++                    }
++                    return 0;
++                }, &segs);
++                return segs;
++            };
++            static std::vector<LinuxMainSeg> g_linux_segs;
++            if (g_linux_segs.empty()) g_linux_segs = linux_main_segments();
++
++            auto linux_find_utf16 = [](const char16_t* needle, bool require_leading_null) -> std::vector<uintptr_t> {
++                std::vector<uintptr_t> out;
++                size_t nlen = 0;
++                while (needle[nlen]) nlen++;
++                const size_t bytes = nlen * 2;
++                for (const auto& s : g_linux_segs) {
++                    if (s.writable) continue;
++                    for (size_t i = 0; i + bytes + 2 <= s.size; i += 2) {
++                        if (*reinterpret_cast<const uint16_t*>(s.start + i) == needle[0] &&
++                            memcmp(s.start + i, needle, bytes) == 0) {
++                            if (require_leading_null) {
++                                if (i < 2 || *reinterpret_cast<const uint16_t*>(s.start + i - 2) != 0) continue;
++                                if (*reinterpret_cast<const uint16_t*>(s.start + i + bytes) != 0) continue;
++                            }
++                            out.push_back(reinterpret_cast<uintptr_t>(s.start + i));
++                        }
++                    }
++                }
++                return out;
++            };
++            // 单遍扫描可执行段：找出引用任一字符串出现位置的指令，
++            // 并在附近找 `BA 01 00 00 00 E8` 的 call 目标（按字符串分组）。
++            auto linux_collect_ctor_targets_by_group = [](const std::vector<std::vector<uintptr_t>>& occ) -> std::vector<std::set<uintptr_t>> {
++                std::vector<std::set<uintptr_t>> targets(occ.size());
++                std::unordered_map<uint32_t, size_t> group_of;
++                for (size_t g = 0; g < occ.size(); g++)
++                    for (uintptr_t a : occ[g]) group_of[static_cast<uint32_t>(a & 0xFFFFFFFF)] = g;
++                if (group_of.empty()) return targets;
++                for (const auto& s : g_linux_segs) {
++                    if (!s.exec) continue;
++                    uintptr_t begin = reinterpret_cast<uintptr_t>(s.start);
++                    uintptr_t end = begin + s.size;
++                    for (size_t i = 0; i + 4 <= s.size; i++) {
++                        uint32_t v;
++                        memcpy(&v, s.start + i, 4);
++                        auto it = group_of.find(v);
++                        if (it == group_of.end()) continue;
++                        uintptr_t ref = begin + i;
++                        uintptr_t lo = (ref > 256) ? ref - 256 : begin;
++                        uintptr_t hi = (ref + 256 + 6 < end) ? ref + 256 : (end > 6 ? end - 6 : end);
++                        for (uintptr_t a = lo; a < hi; a++) {
++                            const uint8_t* q = reinterpret_cast<const uint8_t*>(a);
++                            if (q[0] == 0xBA && q[1] == 0x01 && q[2] == 0x00 && q[3] == 0x00 && q[4] == 0x00 && q[5] == 0xE8) {
++                                int32_t rel;
++                                memcpy(&rel, q + 6, 4);
++                                targets[it->second].insert((a + 5) + 5 + static_cast<int64_t>(rel));
++                            }
++                        }
++                    }
++                }
++                return targets;
++            };
++            auto resolve_fname_ctor_linux = [&]() -> void* {
++                static const char16_t* kNames[] = {
++                    u"Engine", u"Renderer", u"AnimGraphRuntime", u"Landscape", u"RenderCore"
++                };
++                std::vector<std::vector<uintptr_t>> occ;
++                for (const char16_t* n : kNames) occ.push_back(linux_find_utf16(n, true));
++                auto per = linux_collect_ctor_targets_by_group(occ);
++                std::set<uintptr_t> common;
++                for (size_t g = 0; g < per.size(); g++) {
++                    std::set<uintptr_t> all = per[g];
++                    if (g == 0) { common = all; continue; }
++                    std::set<uintptr_t> inter;
++                    for (uintptr_t t : common) if (all.count(t)) inter.insert(t);
++                    common.swap(inter);
++                    if (common.empty()) break;
++                }
++                if (!common.empty()) {
++                    fprintf(stderr, "[UE4SS] FName::FName 解析器命中: 0x%lx (%zu 个候选)\n",
++                            (unsigned long)*common.begin(), common.size());
++                    return reinterpret_cast<void*>(*common.begin());
++                }
++                fprintf(stderr, "[UE4SS] FName::FName 解析器未命中，回退 AOB 扫描\n");
++                return nullptr;
++            };
++            auto resolve_fname_tostring_linux = [&]() -> void* {
++                const char16_t needle[] = u"SkySphereMesh";
++                std::vector<uintptr_t> strs = linux_find_utf16(needle, false);
++                for (uintptr_t sv : strs) {
++                    const uint32_t le = static_cast<uint32_t>(sv & 0xFFFFFFFF);
++                    for (const auto& s : g_linux_segs) {
++                        if (!s.exec) continue;
++                        for (size_t i = 0; i + 21 <= s.size; i++) {
++                            const uint8_t* q = s.start + i;
++                            if (q[0] != 0xE8) continue;
++                            if (!(q[5] == 0x49 && q[6] == 0x8B && q[7] == 0x5F && q[8] == 0x10 &&
++                                  q[9] == 0x48 && q[10] == 0x8D && q[11] == 0x7C && q[12] == 0x24 &&
++                                  q[13] == 0x30 && q[14] == 0xBE)) continue;
++                            uint32_t imm;
++                            memcpy(&imm, q + 15, 4);
++                            if (imm != le) continue;
++                            int32_t rel;
++                            memcpy(&rel, q + 1, 4);
++                            uintptr_t call_va = reinterpret_cast<uintptr_t>(q);
++                            void* target = reinterpret_cast<void*>(call_va + 5 + static_cast<int64_t>(rel));
++                            fprintf(stderr, "[UE4SS] FName::ToString 解析器命中: %p\n", target);
++                            return target;
++                        }
++                    }
++                }
++                fprintf(stderr, "[UE4SS] FName::ToString 解析器未命中，回退 AOB 扫描\n");
++                return nullptr;
++            };
++
+             // All overrides are non-fatal — the binary is likely stripped so dlsym won't find symbols.
+             // The important thing is that ps_scan returns true (because all config flags are false)
+             // so we don't get stuck in the scan retry loop.
+@@ -1550,13 +1686,13 @@ namespace RC
+                         }
+ 
+                         int32_t max_elements = *reinterpret_cast<int32_t*>(candidate + 0x20);
+-                        if (max_elements < 100 || max_elements > 10000000) return false;
++                        if (max_elements < 100 || max_elements > (1 << 30)) return false;
+ 
+                         int32_t num_elements = *reinterpret_cast<int32_t*>(candidate + 0x24);
+                         if (num_elements < 1 || num_elements > max_elements) return false;
+ 
+                         int32_t max_chunks = *reinterpret_cast<int32_t*>(candidate + 0x28);
+-                        if (max_chunks <= 0 || max_chunks > 10000) return false;
++                        if (max_chunks <= 0 || max_chunks > 65536) return false;
+ 
+                         int32_t num_chunks = *reinterpret_cast<int32_t*>(candidate + 0x2C);
+                         if (num_chunks < 0 || num_chunks > max_chunks) return false;
+@@ -1567,18 +1703,52 @@ namespace RC
+                         if (chunks == nullptr) return false;
+                         if (!is_readable_safe(reinterpret_cast<uintptr_t>(chunks), 8)) return false;
+ 
++                        // ---- 强化校验（Palworld 1.0.4 适配）----
++                        // 真 GUObjectArray 是主程序 .bss 里的全局变量：结构本体必在主程序可写段内。
++                        // 之前弱校验会把栈/堆上恰好长得像的计数器数组当成 GUObjectArray。
++                        static std::vector<SegmentInfo> main_segs_cache;
++                        if (main_segs_cache.empty()) main_segs_cache = collect_main_exe_segments();
++                        auto in_main_writable = [&](uintptr_t a) -> bool {
++                            for (const auto& s : main_segs_cache) {
++                                if (s.writable && a >= reinterpret_cast<uintptr_t>(s.start) &&
++                                    a < reinterpret_cast<uintptr_t>(s.start) + s.size) return true;
++                            }
++                            return false;
++                        };
++                        auto in_main_nonwritable = [&](uintptr_t a) -> bool {
++                            for (const auto& s : main_segs_cache) {
++                                if (!s.writable && a >= reinterpret_cast<uintptr_t>(s.start) &&
++                                    a < reinterpret_cast<uintptr_t>(s.start) + s.size) return true;
++                            }
++                            return false;
++                        };
++                        if (!in_main_writable(reinterpret_cast<uintptr_t>(candidate))) return false;
++
+                         void* first_chunk = *reinterpret_cast<void* volatile*>(chunks);
+                         if (first_chunk == nullptr) return false;
+-                        if (!is_readable_safe(reinterpret_cast<uintptr_t>(first_chunk), 64)) return false;
+-
+-                        // Verify first element in first chunk looks like a UObject pointer
+-                        void* first_obj = *reinterpret_cast<void* volatile*>(first_chunk);
+-                        if (first_obj == nullptr) return false;
+-                        if (!is_readable_safe(reinterpret_cast<uintptr_t>(first_obj), 64)) return false;
+-                        // Check that first_obj has a valid vtable pointer (first 8 bytes should be a readable pointer)
+-                        void* vtable = *reinterpret_cast<void* volatile*>(first_obj);
+-                        if (vtable == nullptr) return false;
+-                        if (!is_readable_safe(reinterpret_cast<uintptr_t>(vtable), 8)) return false;
++                        if (!is_readable_safe(reinterpret_cast<uintptr_t>(first_chunk),
++                                              static_cast<size_t>(8) * 0x18)) return false;
++
++                        // 遍历 chunk 0 前 8 个 FUObjectItem（stride 0x18，UE5.1 布局）：
++                        //   * Object 可读
++                        //   * Object 的 vtable 在主程序只读/可执行段（UObject 的 vtable 在模块 .rodata）
++                        //   * UObjectBase::InternalIndex（+0x0C）等于数组下标
++                        // 这三条同时成立的概率对假地址几乎为 0。
++                        int32_t non_null_objs = 0;
++                        for (int32_t idx = 0; idx < 8; idx++) {
++                            uint8_t* item = reinterpret_cast<uint8_t*>(first_chunk) + static_cast<size_t>(idx) * 0x18;
++                            void* obj = *reinterpret_cast<void* volatile*>(item);
++                            if (obj == nullptr) continue;
++                            uintptr_t obj_addr = reinterpret_cast<uintptr_t>(obj);
++                            if (!is_readable_safe(obj_addr, 0x28)) return false;
++                            void* vtable = *reinterpret_cast<void* volatile*>(obj);
++                            if (vtable == nullptr) return false;
++                            if (!in_main_nonwritable(reinterpret_cast<uintptr_t>(vtable))) return false;
++                            int32_t internal_index = *reinterpret_cast<int32_t*>(obj_addr + 0x0C);
++                            if (internal_index != idx) return false;
++                            non_null_objs++;
++                        }
++                        if (non_null_objs < 3) return false;
+ 
+                         return true;
+                     };
+@@ -1729,7 +1899,7 @@ namespace RC
+                                     uint8_t* candidate = seg.start + offset;
+                                     // Quick pre-filter: check max_elements first to avoid full validation
+                                     int32_t me = *reinterpret_cast<int32_t*>(candidate + 0x20);
+-                                    if (me < 100 || me > 10000000) continue;
++                                    if (me < 100 || me > (1 << 30)) continue;
+                                     int32_t ne = *reinterpret_cast<int32_t*>(candidate + 0x24);
+                                     if (ne < 1 || ne > me) continue;
+                                     // Log candidates that pass the quick filter (only first attempt and periodically)
+@@ -1773,8 +1943,10 @@ namespace RC
+                         }
+ 
+                         // Phase 3: Scan ALL writable memory regions (including heap)
+-                        // The FUObjectArray struct may be allocated on the heap by the engine.
+-                        if (!found_addr)
++                        // Linux: GUObjectArray 是主程序 .bss 里的全局变量，Phase 2 已覆盖；
++                        // 扫堆/栈只会命中假地址（历史上正是它把栈地址当成 GUObjectArray），因此跳过。
++                        constexpr bool skip_heap_scan = true;
++                        if (!found_addr && !skip_heap_scan)
+                         {
+                             // Reload maps to get fresh memory layout (heap may have grown)
+                             load_maps();
+@@ -1821,7 +1993,7 @@ namespace RC
+                                     uint8_t* candidate = region_start + offset;
+                                     // Quick pre-filter
+                                     int32_t me = *reinterpret_cast<int32_t*>(candidate + 0x20);
+-                                    if (me < 100 || me > 500000) continue;
++                                    if (me < 100 || me > (1 << 30)) continue;
+                                     int32_t ne = *reinterpret_cast<int32_t*>(candidate + 0x24);
+                                     if (ne < 100 || ne > me) continue;
+                                     // Full validation
+@@ -1856,6 +2028,7 @@ namespace RC
+                     if (!addr) addr = try_resolve("_ZN5FName8ToStringEv");
+                     // Try const variant
+                     if (!addr) addr = try_resolve("_ZNK5FName8ToStringEv");
++                    if (!addr) addr = resolve_fname_tostring_linux();
+ 
+                     // AOB-Scan fallback for FName::ToString
+                     // FName::ToString on x86_64 typically:
+@@ -2191,6 +2364,11 @@ namespace RC
+ 
+                         dl_iterate_phdr([](struct dl_phdr_info* info, size_t, void* data) -> int {
+                             auto* segs = static_cast<std::vector<WritableSeg>*>(data);
++                            // 只扫主程序（GMalloc 一定在主程序里；扫其它 .so 会命中无关全局）
++                            const char* nm = info->dlpi_name;
++                            bool is_main = (!nm || nm[0] == '\0');
++                            if (!is_main && nm && strstr(nm, "PalServer-Linux-Shipping")) is_main = true;
++                            if (!is_main) return 0;
+                             for (int i = 0; i < info->dlpi_phnum; i++) {
+                                 const ElfW(Phdr)* phdr = &info->dlpi_phdr[i];
+                                 if (phdr->p_type == PT_LOAD && (phdr->p_flags & PF_W)) {
+@@ -2218,35 +2396,85 @@ namespace RC
+                             return false;
+                         };
+ 
+-                        // GMalloc is FMalloc** — a pointer in .data/.bss pointing to a FMalloc* in .data/.bss
+-                        // Scan for: ptr -> ptr -> (writable segment)
+-                        // The first pointer is GMalloc itself, the second is the FMalloc instance
++                        // GMalloc 是 FMalloc**（.bss 里存着 FMalloc 实例指针）。
++                        // vtable 锚点法（Palworld stripped 二进制仍导出 3 万+ vtable）：
++                        // FMalloc 实例的首字段（vptr）必等于某个 "vtable for FMallocXxx" + 0x10。
++                        // 在 .bss/.data 里反查这样的对象指针，其所在的全局就是 GMalloc 别名之一。
++                        std::vector<uintptr_t> fmalloc_vptrs;
++                        {
++                            static const char* kAllocatorNames[] = {
++                                "FMallocAnsi", "FMallocBinned", "FMallocBinned2", "FMallocBinned3",
++                                "FMallocBinnedGPU", "FMallocBinnedArena", "FMallocJemalloc",
++                                "FMallocMimalloc", "FMallocArena", "FMallocFrameProfiler",
++                                "FMallocCallstackHandler", "FMallocDoubleFreeFinder",
++                                "FMallocPoisonProxy", "FMallocPurgatoryProxy", "FMallocThreadSafeProxy",
++                            };
++                            for (const char* n : kAllocatorNames)
++                            {
++                                std::string sym = std::string("_ZTV") + std::to_string(std::strlen(n)) + n;
++                                if (void* vt = dlsym(RTLD_DEFAULT, sym.c_str()))
++                                {
++                                    fmalloc_vptrs.push_back(reinterpret_cast<uintptr_t>(vt) + 0x10);
++                                }
++                            }
++                            fprintf(stderr, "[UE4SS] GMalloc: %zu 个 FMalloc vtable 锚点\n", fmalloc_vptrs.size());
++                            for (auto vt : fmalloc_vptrs) fprintf(stderr, "[UE4SS] GMalloc anchor vptr=0x%lx\n", (unsigned long)vt);
++                        }
++
++                        // 可读区间（安全解引用候选对象）
++                        struct ReadRange { uintptr_t start; uintptr_t end; };
++                        std::vector<ReadRange> readable_ranges;
++                        if (FILE* mf = fopen("/proc/self/maps", "r"))
++                        {
++                            char line[512];
++                            while (fgets(line, sizeof(line), mf))
++                            {
++                                uintptr_t rs = 0, re = 0;
++                                char perms[8] = {};
++                                if (sscanf(line, "%lx-%lx %7s", &rs, &re, perms) == 3 && perms[0] == 'r')
++                                {
++                                    readable_ranges.push_back({rs, re});
++                                }
++                            }
++                            fclose(mf);
++                        }
++                        auto is_readable_addr = [&readable_ranges](uintptr_t a, size_t len) -> bool {
++                            uintptr_t end = a + len;
++                            for (const auto& r : readable_ranges)
++                                if (a >= r.start && end <= r.end) return true;
++                            return false;
++                        };
++
+                         void* found_addr = nullptr;
+-                        for (const auto& seg : writable_segments)
++                        if (!fmalloc_vptrs.empty())
+                         {
+-                            for (size_t offset = 0; offset + 8 <= seg.size; offset += 8)
++                            uintptr_t best_global = UINTPTR_MAX;
++                            for (const auto& seg : writable_segments)
+                             {
+-                                uintptr_t first_ptr = *reinterpret_cast<uintptr_t*>(seg.start + offset);
+-                                if (first_ptr < 0x10000 || first_ptr > 0x7fffffffffff) continue;
+-                                if (!is_writable(first_ptr)) continue;
+-
+-                                // Dereference first_ptr to get the FMalloc instance pointer
+-                                uintptr_t second_ptr = *reinterpret_cast<uintptr_t*>(first_ptr);
+-                                if (second_ptr < 0x10000 || second_ptr > 0x7fffffffffff) continue;
+-                                if (!is_writable(second_ptr)) continue;
+-
+-                                // Candidate found — GMalloc is at seg.start + offset
+-                                // But we need to filter false positives. GMalloc typically has
+-                                // a recognizable vtable nearby. For now, accept the first match.
+-                                found_addr = seg.start + offset;
+-                                UE4SS_DBG("[UE4SS] Heuristic scan: GMalloc candidate at %p (-> %p -> %p)\n", found_addr, (void*)first_ptr, (void*)second_ptr);
+-                                break;
++                                for (size_t offset = 0; offset + 8 <= seg.size; offset += 8)
++                                {
++                                    uintptr_t obj = *reinterpret_cast<uintptr_t*>(seg.start + offset);
++                                    if (obj < 0x10000 || obj > 0x7fffffffffff) continue;
++                                    if (!is_readable_addr(obj, 8)) continue;
++                                    uintptr_t vptr = *reinterpret_cast<uintptr_t*>(obj);
++                                    bool match = false;
++                                    for (uintptr_t vt : fmalloc_vptrs)
++                                        if (vptr == vt) { match = true; break; }
++                                    if (!match) continue;
++                                    uintptr_t global_addr = reinterpret_cast<uintptr_t>(seg.start + offset);
++                                    fprintf(stderr, "[UE4SS] GMalloc 命中: global=0x%lx -> obj=0x%lx vptr=0x%lx\n",
++                                            (unsigned long)global_addr, (unsigned long)obj, (unsigned long)vptr);
++                                    if (global_addr < best_global)
++                                    {
++                                        best_global = global_addr;
++                                        found_addr = seg.start + offset;
++                                    }
++                                }
+                             }
+-                            if (found_addr) break;
+                         }
+ 
+                         if (found_addr) addr = found_addr;
+-                        else UE4SS_DBG("[UE4SS] Heuristic scan: GMalloc not found\n");
++                        else fprintf(stderr, "[UE4SS] GMalloc vtable 锚点未命中（不用旧启发式）\n");
+                     }
+ 
+                     if (addr)
+@@ -2280,6 +2508,7 @@ namespace RC
+                     if (!addr) addr = try_resolve("_ZN5FNameC2EPKDs");
+                     // C2 base constructor variants
+                     if (!addr) addr = try_resolve("_ZN5FNameC2Ev");
++                    if (!addr) addr = resolve_fname_ctor_linux();
+ 
+                     // AOB-Scan fallback: search executable segments for FName constructor pattern
+                     // The FName(const CharType*, EFindName) constructor on x86_64 UE5 typically:
+@@ -3134,7 +3363,7 @@ namespace RC
+                 Output::send<Color::Blue>(STR("FMalloc\n"));
+                 retrieve_vtable_layout_from_ini(STR("FMalloc"), [&](uint32_t index, File::StringType& item) {
+                     // We don't support FExec, so we're manually telling it the size.
+-                    static constexpr uint32_t fexec_size = 1;
++                    static constexpr uint32_t fexec_size = 2; // Palworld 1.0.4: FMalloc vtable 在 Malloc 前有 2 个基类槽（实测 dtor@0, X@8, Y@10, Malloc@18）
+                     uint32_t offset = calculate_virtual_function_offset(index, fexec_size);
+                     Output::send(STR("FMalloc::{} = 0x{:X}\n"), item, offset);
+                     Unreal::FMalloc::VTableLayoutMap.emplace(item, offset);
+diff --git a/cmake/modules/IDEVisibility.cmake b/cmake/modules/IDEVisibility.cmake
+index a702cf0..7ff114f 100644
+--- a/cmake/modules/IDEVisibility.cmake
++++ b/cmake/modules/IDEVisibility.cmake
+@@ -36,12 +36,16 @@ function(make_headers_visible TARGET_NAME INCLUDE_DIR)
+         get_target_property(target_type ${TARGET_NAME} TYPE)
+ 
+         if(target_type STREQUAL "INTERFACE_LIBRARY")
+-            # For INTERFACE libraries, add FILE_SET for actual usage
+-            target_sources(${TARGET_NAME} INTERFACE
+-                FILE_SET headers TYPE HEADERS
+-                BASE_DIRS ${INCLUDE_DIR}
+-                FILES ${HEADER_FILES}
+-            )
++            # For INTERFACE libraries, add FILE_SET for actual usage (CMake >= 3.23)
++            if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.23")
++                target_sources(${TARGET_NAME} INTERFACE
++                    FILE_SET headers TYPE HEADERS
++                    BASE_DIRS ${INCLUDE_DIR}
++                    FILES ${HEADER_FILES}
++                )
++            else()
++                target_sources(${TARGET_NAME} INTERFACE ${HEADER_FILES})
++            endif()
+ 
+             # Create a companion OBJECT library for IDE visibility
+             # This makes the headers appear in the solution explorer
+@@ -71,11 +75,15 @@ function(make_headers_visible TARGET_NAME INCLUDE_DIR)
+             endif()
+         else()
+             # For normal libraries
+-            target_sources(${TARGET_NAME} PUBLIC
+-                FILE_SET headers TYPE HEADERS
+-                BASE_DIRS ${INCLUDE_DIR}
+-                FILES ${HEADER_FILES}
+-            )
++            if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.23")
++                target_sources(${TARGET_NAME} PUBLIC
++                    FILE_SET headers TYPE HEADERS
++                    BASE_DIRS ${INCLUDE_DIR}
++                    FILES ${HEADER_FILES}
++                )
++            else()
++                target_sources(${TARGET_NAME} PUBLIC ${HEADER_FILES})
++            endif()
+         endif()
+         
+         message(STATUS "Added ${TARGET_NAME} headers to IDE visibility")
+diff --git a/deps/first/Unreal/CMakeLists.txt b/deps/first/Unreal/CMakeLists.txt
+index 14df4ba..2865ab6 100644
+--- a/deps/first/Unreal/CMakeLists.txt
++++ b/deps/first/Unreal/CMakeLists.txt
+@@ -65,10 +65,14 @@ target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
+ target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/generated_include)
+ 
+ file(GLOB_RECURSE UE4SS_HEADERS include/**.hpp generated_include/**.hpp)
+-target_sources(${TARGET} PUBLIC
+-    FILE_SET unreal_headers TYPE HEADERS
+-    BASE_DIRS include generated_include
+-    FILES ${UE4SS_HEADERS})
++if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.23")
++    target_sources(${TARGET} PUBLIC
++        FILE_SET unreal_headers TYPE HEADERS
++        BASE_DIRS include generated_include
++        FILES ${UE4SS_HEADERS})
++else()
++    target_sources(${TARGET} PUBLIC ${UE4SS_HEADERS})
++endif()
+ get_property("TARGET_SOURCE_FILES" TARGET "${TARGET}" PROPERTY SOURCES)
+ source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${TARGET_SOURCE_FILES} ${UE4SS_HEADERS})
+ 
+diff --git a/deps/first/Unreal/include/Unreal/NameTypes.hpp b/deps/first/Unreal/include/Unreal/NameTypes.hpp
+index e127142..b823eb3 100644
+--- a/deps/first/Unreal/include/Unreal/NameTypes.hpp
++++ b/deps/first/Unreal/include/Unreal/NameTypes.hpp
+@@ -235,7 +235,17 @@ namespace RC::Unreal
+             // Assign the temporary address if one exists
+             if (FunctionAddressOverride) { ConstructorInternal.assign_temp_address(FunctionAddressOverride); }
+ 
++#ifdef __linux__
++            // Linux (Itanium ABI)：FName::FName 的第一个参数是隐式 this/输出指针（rdi），
++            // 字符串在 rsi、EFindName 在 edx；而 Function<> 是按“自由函数返回 FName”声明的，
++            // 直接调用会把字符串当 this、把 FindType 当字符串指针。按正确 ABI 重新解释后调用。
++            FName Name{};
++            using LinuxFNameCtor = void (*)(FName*, const CharType*, EFindName);
++            auto ctor = reinterpret_cast<LinuxFNameCtor>(ConstructorInternal.get_function_address());
++            ctor(&Name, StrName, FindType);
++#else
+             FName Name = ConstructorInternal(StrName, FindType);
++#endif
+             ComparisonIndex = Name.ComparisonIndex;
+ #ifdef WITH_CASE_PRESERVING_NAME
+             DisplayIndex = Name.DisplayIndex;
+diff --git a/deps/first/Unreal/include/Unreal/VersionedContainer/UnrealVirtualImpl/UnrealVirtualBaseVC.hpp b/deps/first/Unreal/include/Unreal/VersionedContainer/UnrealVirtualImpl/UnrealVirtualBaseVC.hpp
+index 68af5a3..6bcae9c 100644
+--- a/deps/first/Unreal/include/Unreal/VersionedContainer/UnrealVirtualImpl/UnrealVirtualBaseVC.hpp
++++ b/deps/first/Unreal/include/Unreal/VersionedContainer/UnrealVirtualImpl/UnrealVirtualBaseVC.hpp
+@@ -9,11 +9,13 @@
+ #define ARGS(...)  __VA_ARGS__
+ 
+ // GCC doesn't support std::bit_cast with member function pointers (not trivially copyable)
+-// Use a union-based cast instead
++// Use a union-based cast instead.
++// 注意：必须零初始化 union！Itanium ABI 的成员函数指针是 {fnptr, this_adjustment}，
++// 只写第一个字会让第二个字（this 调整量）变成栈垃圾，调用时 this += 垃圾 → 段错误。
+ #ifndef _MSC_VER
+ template <typename MemberFuncPtr>
+ static MemberFuncPtr bit_cast_mfp(void* ptr) {
+-    union { void* in; MemberFuncPtr out; } u;
++    union { void* in; MemberFuncPtr out; } u{};
+     u.in = ptr;
+     return u.out;
+ }
+diff --git a/deps/first/Unreal/src/UObjectGlobals.cpp b/deps/first/Unreal/src/UObjectGlobals.cpp
+index 3ee3ad2..bc00c7b 100644
+--- a/deps/first/Unreal/src/UObjectGlobals.cpp
++++ b/deps/first/Unreal/src/UObjectGlobals.cpp
+@@ -691,21 +691,25 @@ namespace RC::Unreal::UObjectGlobals
+         LoopAction Action{};
+ 
+         const auto& ObjObjects = GUObjectArray->GetObjObjects();
+-        const auto NumChunks = ObjObjects.GetNumChunks();
++        const auto NumElements = ObjObjects.GetNumElements();
+         static const auto ItemSize = FUObjectItem::UEP_TotalSize();
++        const auto ChunksPtr = ObjObjects.GetObjects();
+ 
+-        for (int32_t ChunkIndex = 0; ChunkIndex < NumChunks; ++ChunkIndex)
++        // Palworld (stripped binary) 适配：原来按 "每个 chunk 遍历 65536 项" 的写法
++        // 会读到最后一块 chunk 里 NumElements 之后未初始化的内存，遇到垃圾指针直接崩。
++        // 改为按全局索引只遍历到 NumElements，并对指针做范围校验。
++        for (int32_t ItemIndex = 0; ItemIndex < NumElements; ++ItemIndex)
+         {
+-            for (int32_t ItemIndex = 0; ItemIndex < TUObjectArray::NumElementsPerChunk; ++ItemIndex)
+-            {
+-                const auto& ChunksPtr = ObjObjects.GetObjects();
+-                const auto ObjectItem = std::bit_cast<FUObjectItem*>(&std::bit_cast<uint8_t*>(ChunksPtr[ChunkIndex])[ItemIndex * ItemSize]);
+-                const auto Object = ObjectItem->GetUObject();
+-                if (ObjectItem->IsUnreachable() || !Object) { continue; }
+-                GUOBJECTARRAY_PROFILE_ITER_COUNT()
+-                Action = Callable(Object, ChunkIndex, ItemIndex);
+-                if (Action == LoopAction::Break) { break; }
+-            }
++            const int32_t ChunkIndex = ItemIndex / TUObjectArray::NumElementsPerChunk;
++            const int32_t WithinChunkIndex = ItemIndex % TUObjectArray::NumElementsPerChunk;
++            if (!ChunksPtr[ChunkIndex]) { continue; }
++            const auto ObjectItem = std::bit_cast<FUObjectItem*>(&std::bit_cast<uint8_t*>(ChunksPtr[ChunkIndex])[WithinChunkIndex * ItemSize]);
++            const auto Object = ObjectItem->GetUObject();
++            const uintptr_t ObjectAddr = reinterpret_cast<uintptr_t>(Object);
++            if (!Object || ObjectItem->IsUnreachable()) { continue; }
++            if (ObjectAddr < 0x10000 || ObjectAddr > 0x7fffffffffffULL) { continue; }
++            GUOBJECTARRAY_PROFILE_ITER_COUNT()
++            Action = Callable(Object, ChunkIndex, WithinChunkIndex);
+             if (Action == LoopAction::Break) { break; }
+         }
+         GUOBJECTARRAY_PROFILE_ITER_END()
+@@ -749,32 +753,23 @@ namespace RC::Unreal::UObjectGlobals
+ 
+         const auto& ObjObjects = GUObjectArray->GetObjObjects();
+         const auto NumElements = ObjObjects.GetNumElements();
+-        const auto NumChunks = ObjObjects.GetNumChunks();
+         static const auto ItemSize = FUObjectItem::UEP_TotalSize();
++        const auto ChunksPtr = ObjObjects.GetObjects();
+ 
+         const int32_t EndClamped = End < NumElements ? End : NumElements;
+-        const int32_t StartChunk = Start / TUObjectArray::NumElementsPerChunk;
+-        const int32_t StartItemIndex = Start % TUObjectArray::NumElementsPerChunk;
+-
+-        int32_t CurrentTotalItem = Start;
+-        for (int32_t ChunkIndex = StartChunk; ChunkIndex < NumChunks; ++ChunkIndex)
++        if (Start < 0) { Start = 0; }
++        for (int32_t ItemIndex = Start; ItemIndex < EndClamped; ++ItemIndex)
+         {
+-            bool ShouldBreak{};
+-            for (int32_t ItemIndex = StartItemIndex; ItemIndex < TUObjectArray::NumElementsPerChunk; ++ItemIndex)
+-            {
+-                const auto& ChunksPtr = ObjObjects.GetObjects();
+-                const auto ObjectItem = std::bit_cast<FUObjectItem*>(&std::bit_cast<uint8_t*>(ChunksPtr[ChunkIndex])[ItemIndex * ItemSize]);
+-                const auto Object = ObjectItem->GetUObject();
+-                if (ObjectItem->IsUnreachable() || !Object) { continue; }
+-                Action = Callable(Object, ChunkIndex, ItemIndex);
+-                if (Action == LoopAction::Break || CurrentTotalItem >= EndClamped)
+-                {
+-                    ShouldBreak = true;
+-                    break;
+-                }
+-            }
+-            ++CurrentTotalItem;
+-            if (ShouldBreak) { break; }
++            const int32_t ChunkIndex = ItemIndex / TUObjectArray::NumElementsPerChunk;
++            const int32_t WithinChunkIndex = ItemIndex % TUObjectArray::NumElementsPerChunk;
++            if (!ChunksPtr[ChunkIndex]) { continue; }
++            const auto ObjectItem = std::bit_cast<FUObjectItem*>(&std::bit_cast<uint8_t*>(ChunksPtr[ChunkIndex])[WithinChunkIndex * ItemSize]);
++            const auto Object = ObjectItem->GetUObject();
++            const uintptr_t ObjectAddr = reinterpret_cast<uintptr_t>(Object);
++            if (!Object || ObjectItem->IsUnreachable()) { continue; }
++            if (ObjectAddr < 0x10000 || ObjectAddr > 0x7fffffffffffULL) { continue; }
++            Action = Callable(Object, ChunkIndex, WithinChunkIndex);
++            if (Action == LoopAction::Break) { break; }
+         }
+     }
+ 

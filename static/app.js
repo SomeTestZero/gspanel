@@ -435,6 +435,37 @@ function initConsole(inst, running) {
       row.appendChild(el);
     });
   }
+  // gspanel 扩展命令（UE4SS mod 文件队列通道；RCON 自定义命令在本游戏不可用）
+  if (inst.has_give_mod && row) {
+    const row2 = document.createElement("div");
+    row2.className = "row mt";
+    row2.innerHTML = '<span class="hint">扩展:</span>';
+    const addBtn = (label, fn) => {
+      const el = document.createElement("button");
+      el.className = "small";
+      el.textContent = label;
+      el.onclick = fn;
+      row2.appendChild(el);
+    };
+    addBtn("在线玩家", () => modCmd(inst.name, "who", [], "在线玩家"));
+    addBtn("给物品…", () => {
+      const v = prompt("格式: 玩家名/PlayerUID/SteamID 物品ID 数量\n例如: some_test0 Wood 100");
+      if (!v) return;
+      const p = v.trim().split(/\s+/);
+      if (p.length < 3) { alert("参数不足（需要 玩家 物品ID 数量）"); return; }
+      if (!confirm(`确认给「${p[0]}」物品 ${p[1]} x ${p[2]}？`)) return;
+      modCmd(inst.name, "give", [p[0], p[1], p[2]], "给物品");
+    });
+    addBtn("给经验…", () => {
+      const v = prompt("格式: 玩家名/PlayerUID/SteamID 经验值\n例如: some_test0 5000");
+      if (!v) return;
+      const p = v.trim().split(/\s+/);
+      if (p.length < 2) { alert("参数不足（需要 玩家 经验值）"); return; }
+      if (!confirm(`确认给「${p[0]}」经验 ${p[1]}？`)) return;
+      modCmd(inst.name, "giveexp", [p[0], p[1]], "给经验");
+    });
+    row.insertAdjacentElement("afterend", row2);
+  }
 }
 /* 在控制台输出一行（命令回显/RCON 响应），并维持 2000 行上限与自动滚动 */
 function consoleAppend(text, cls) {
@@ -453,6 +484,15 @@ async function sendCommand(name, cmd) {
   try {
     const r = await api(`/api/instances/${name}/command`, { method: "POST", body: { command: cmd } });
     consoleAppend(r.response || "(无响应)", "cmd-resp");
+  } catch (e) { consoleAppend("错误: " + e.message, "cmd-err"); }
+}
+
+/* 走 UE4SS mod 文件队列的扩展命令（给物品/给经验/在线玩家） */
+async function modCmd(name, verb, args, label) {
+  consoleAppend(`> [${label || verb}] ${args.join(" ")}`, "cmd-echo");
+  try {
+    const r = await api(`/api/instances/${name}/mod-command`, { method: "POST", body: { verb, args } });
+    consoleAppend(r.message || "(无响应)", r.ok ? "cmd-resp" : "cmd-err");
   } catch (e) { consoleAppend("错误: " + e.message, "cmd-err"); }
 }
 
