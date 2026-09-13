@@ -12,7 +12,13 @@
 
 ## 运行形态
 
-- 面板服务：`gspanel.service`（开机自启），二进制 `/root/gspanel/gspanel`，源码同目录
+- 面板服务：`gspanel.service`（开机自启），**以普通用户运行**（systemd `User=`，本机 `ubuntu`）：
+  - unit 里 `AmbientCapabilities=CAP_CHOWN CAP_DAC_OVERRIDE`：写 `/home/games/**`（games 属主文件）后能 chown 回 games；
+    **别设 `CapabilityBoundingSet`**（见已知坑）
+  - 需要 root 的动作经助手 `/usr/local/sbin/gspanel-priv`（sudoers `/etc/sudoers.d/gspanel` 白名单）：
+    写/删 `gspanel-*.service`+daemon-reload、start/stop/enable/disable、apt 装 32 位依赖
+  - 切 `games` 身份走 `sudo -u games env HOME=/home/games ...`（sudo 会清能力位；仅 root 旧模式用 Credential）
+  - 二进制 `/home/ubuntu/gspanel/gspanel`，源码同目录（属主 `ubuntu`）
 - 监听：默认 `:8800`（`State.BindAddr()`，存 `data/config.json` 的 `port`）
 - 路径（main.go）：`BaseDir` 运行时取二进制所在目录（clone 位置随意，`data/`、`templates/`
   用户模板都跟随它）；游戏侧固定 `InstancesDir=/home/games/instances`、
@@ -29,7 +35,8 @@
 ## 构建 / 部署 / 验证
 
 ```bash
-./deploy.sh                                        # 幂等一键部署：裸机全装（Go/games 用户/unit/自启），已装则只构建+重启面板；
+sudo ./deploy.sh                                   # 幂等一键部署（需 root）：裸机全装（Go/games 用户/unit/特权助手/自启），已装则只构建+重启面板；
+                                                   # 面板运行用户默认取 sudo 调用者，PANEL_USER=用户名 可覆盖；unit 每次重写
                                                    # saves/<实例>.tar.gz 会拷进备份目录供恢复（本机已有同名实例则跳过）
 ./push-saves.sh                                    # 收各实例最新备份到 saves/ 作迁移种子；git 提交推送留人工
 journalctl -u gspanel -n 10 --no-pager               # 启动日志里有 "loaded N game templates"
@@ -45,13 +52,14 @@ go vet ./...                                         # 无测试框架；临时�
 | 文件 | 职责 |
 |---|---|
 | main.go | 启动、常量、embed、Server 结构体 |
-| api.go | 全部 HTTP 路由/handler（认证、实例 CRUD、启停、控制台、配置读写、备份、计划任务、事件日志 `GET /api/events`）；各写操作成功后顺手记事件 |
+| `api.go` | 全部 HTTP 路由/handler（认证、实例 CRUD、启停、控制台、配置读写、备份、计划任务、事件日志 `GET /api/events`）；各写操作成功后顺手记事件。`POST /api/instances/{name}/mod-command` 是 Palworld 扩展命令（走 UE4SS mod 文件队列，返回 `{ok,message}`） |
 | auth.go | 会话 + 登录限流（10 分钟错 5 次锁 10 分钟） |
 | config.go | State 结构、config.json 读写、BindAddr |
 | events.go | 事件日志（时间线）：`EventLog` 持久化到 `data/events.jsonl`（每行一条 JSON，内存留 500 条，超 256KB 重写截断）；任务开始/结束经 `TaskManager.OnStart/OnFinish` 回调自动入日志；看门狗 `watchInstances`（scheduler tick 驱动，靠 `ActiveEnterTimestampMonotonic` 识别进程重启）检测**非面板发起**的退出：崩溃被 systemd 拉起→`crash`、自行退出→`exit`、failed→`failed`（面板操作以 `HasRunningFor`+2 分钟内事件排除误报）；前端「事件日志」页（侧栏，10 秒轮询，可按实例过滤） |
 | templates.go | 模板结构体、`LoadTemplates`、`validateTemplate`、URL 导入（导入即落盘 templates/） |
 | instance.go | 实例生命周期：创建（拷 DefaultArgs）、安装、种子配置、删除 |
-| systemctl.go | 生成 start.sh（`cd 实例目录 && exec 启动命令`）与 systemd unit |
+| systemctl.go | 生成 start.sh（`cd 实例目录 && exec 启动命令`）与 systemd unit；写 unit/启停实例 privileged 动作：root 直接执行，普通用户经 `systemctlPriv` → `sudo /usr/local/sbin/gspanel-priv`，只读 `show` 不走特权 |
+| priv/gspanel-priv | 特权助手（deploy.sh 安装到 `/usr/local/sbin`）：unit-write/unit-remove/ctl/install-deps，unit 名与动作严格校验，sudoers 只授权面板用户执行它 |
 | steamcmd.go | steamcmd 安装/更新游戏、32 位依赖检测与安装（apt） |
 | rcon.go / rest.go | Source RCON 协议；游戏 REST 管理 API（Palworld RCON 丢响应的替代通道） |
 | configfile.go | 游戏配置读写，三种 format：`option-settings`（Palworld 专用就地替换）/ `kv` / `raw` |
@@ -59,6 +67,7 @@ go vet ./...                                         # 无测试框架；临时�
 | scheduler.go | 计划任务（每日/间隔：重启、备份、更新）；`updateInstance`（手动/定时/自动更新共用入口）先比对 Steam buildid 预检，已最新则直接返回不停服（预检失败照旧更新）；`gracefulStop`：RCON 广播→存档→停；tick 里挂版本轮询入口与看门狗 `watchInstances` |
 | updatecheck.go | 版本轮询自动更新：实例开 `auto_update`（设置页开关，存 config.json）后，每 30 分钟用 api.steamcmd.net 查 public 分支 buildid 对比本地 `steamapps/appmanifest_<appid>.acf`，落后且实例无任务在跑（`HasRunningFor`）时更新。玩家门槛 `autoUpdateReady`：服务没开或模板无 `format=players` REST 命令→直接更；有玩家→广播通知（REST Broadcast 优先，每小时最多一次）并等待；无玩家持续 10 分钟（内存态 `autoStates`，面板重启重计）→才起 `auto-update` 任务走 `updateInstance` 流程（停→更→回写配置→拉起）。广播通知与首次无玩家两个等待节点会写事件日志 |
 | backup.go / monitor.go / netinfo.go / util.go | 备份打包/恢复（恢复后按面板记录重写 ini 端口/密码/服务器名）/上传（跨服迁移存档：新机建同名模板实例→上传备份包或 deploy 放好 saves/→恢复）；`backupAndSync`（手动/定时备份共用入口）备份成功后按 `sync_targets` 列表逐目标 rsync 异地同步（`syncBackup`，远端只留最新一份）；/proc 资源监控；公网 IP 探测；chown 等杂项 |
+| tools/palworld-ue4ss/ | Palworld 给物品完整方案：ue4ss-linux 源码补丁（8 个修复）、Lua mod（give/giveexp/玩家索引+文件队列）、UE5.1 布局表、构建/安装/卸载/硬链接副本测试脚本；先读其 README |
 
 ## 模板系统（改动重灾区，坑都在这）
 
@@ -90,7 +99,22 @@ ark-se / terraria / corekeeper / dst（饥荒联机版，343050，2026-07 新增
 - steamcmd 报 "Missing configuration"：删 `~/steamcmd/appcache` 与 `~/Steam/appcache`
 - `systemctl show --value` 多属性顺序不保证，解析要用 key=value
 - 改 `/home/games/instances/**` 任何文件后属主必须保持 `games:games`（用 `chownToGames`）
-- 写文件前先想：面板进程是 root，游戏进程是 games，写错属主游戏写不动
+- 写文件前先想：面板进程是普通用户 `ubuntu`（靠 `CAP_DAC_OVERRIDE` 才能写 games 属主文件，靠 `CAP_CHOWN` 才能 chown 回 games），游戏进程是 games，写错属主游戏写不动
+- **面板 unit 不能设 `CapabilityBoundingSet`**：setuid root 的 `sudo` 也受它约束，缺 CAP_SETUID 会导致 `sudo -u games` 失败（表现为「环境」页依赖检测全 false）；限权只用 `AmbientCapabilities`
+- **Palworld 给物品（原生 Linux）已打通**：官方没有 give 命令（v1.0.4 实测 RCON 一律 `Unknown command`；
+  REST 只有 info/players/metrics/announce/kick/ban/unban/save/stop/shutdown/settings/game-data），
+  我们用**自行修复并重编译的 ue4ss-linux**（LD_PRELOAD + Lua mod）实现；上游预编译版在 1.0.4 上必修的
+  8 个 bug（GUObjectArray 校验/上限、GMalloc vtable 锚点、FMalloc vtable 基类槽数、FName 解析器与 ABI、
+  `bit_cast_mfp` 零初始化、chunk 遍历越界）全部在 `tools/palworld-ue4ss/patches/` + README 里。
+  面板：控制台页多个「扩展: 在线玩家/给物品/给经验」按钮（`api.go` `mod-command` + 文件队列
+  `<实例>/Pal/Binaries/Linux/gspanel-mod/cmd.txt|res.txt`，因为 ProcessConsoleExec hook 在本游戏装不上）。
+  **注意**：`start.sh` 里有 `LD_PRELOAD=`（绝不能进 shell），面板安装/更新会重写 start.sh 丢掉它，
+  游戏更新后需重跑 `tools/palworld-ue4ss/install-to-instance.sh`；
+  **mod 的 Lua 语法/加载期错误会抛 C++ 异常直接 abort 游戏进程**（libsteam_api 的
+  `__gxx_personality_v0` 冲突），改完 mod 必须先 `luac5.4 -p` 校验（已踩坑：Lua 5.4 无全局 unpack、
+  嵌套函数不能用 `...`）。截至 2026-09-13 已实测：UE4SS 完整初始化（FindAllOf/StaticFindObject/
+  ForEachUObject 154k 对象）、mod 加载、文件队列 who/give 错误路径；**对在线玩家的实际给物品
+  尚未实测**（当时无人上线），玩家上线后可用面板「给物品…」验证
 - `data/config.json` 曾被提交进 git（含面板密码哈希/实例 RCON 密码）：已用 filter-repo 重写
   全部历史并 force push（`081edfd` 起历史中无此文件），`.gitignore` 已排除 `data/` 和二进制；
   仓库必须 private（`saves/` 迁移存档的 ini 里含游戏管理员/RCON 密码）

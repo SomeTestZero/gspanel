@@ -3,8 +3,10 @@
 自用的游戏服管理后台。Go 单二进制（无运行时依赖，内存占用 ~11MB），前端页面内嵌，
 游戏进程由 systemd 托管（面板重启/崩溃不影响游戏），新游戏通过 JSON 模板扩展。
 
-- 面板源码与二进制：clone 到任意目录皆可（本机在 `/root/gspanel/`），状态跟随二进制所在目录
-- 面板服务：`gspanel.service`（开机自启）
+- 面板源码与二进制：clone 到任意目录皆可（本机在 `/home/ubuntu/gspanel/`，属主 `ubuntu`），状态跟随二进制所在目录
+- 面板服务：`gspanel.service`（开机自启，以普通用户运行，本机为 `ubuntu`）
+- 面板权限：systemd `User=ubuntu` + `AmbientCapabilities=CAP_CHOWN CAP_DAC_OVERRIDE`；
+  写 unit、启停实例、装 32 位依赖经 `/usr/local/sbin/gspanel-priv`（sudoers 白名单），切 `games` 身份走 `sudo -u games`
 - 游戏实例服务：`gspanel-<实例名>.service`（独立 unit，崩溃自拉起、开机自启）
 - 访问：`http://100.64.0.3:8800`（仅 Tailscale 内网）或 `http://gspanel.tail.yyplab.site:8800`
 
@@ -24,19 +26,21 @@
                   └─ 监控（/proc + systemctl show，无外部 agent）
 ```
 
+- 面板以普通用户运行（本机 `/home/ubuntu/gspanel`），只有写 unit / 管实例 / 装依赖走特权助手
 - 游戏以 `games` 用户（uid 5）运行，实例目录 `/home/games/instances/<名>/`
 - 备份在 `/home/games/backups/<名>/`（tar.gz，保留策略按份数）
 - 状态都在 `面板目录/data/`：`config.json`（账号/实例/计划任务）+ `events.jsonl`（事件日志），无数据库
 
 ## 新服务器安装
 
-一键脚本（幂等，可重复跑）：装 Go、建 `games` 用户、构建、写 systemd unit、开机自启。
+一键脚本（幂等，可重复跑）：装 Go、建 `games` 用户、构建、写 systemd unit、配特权助手、开机自启。
+面板以普通用户运行（默认取 sudo 调用者；`PANEL_USER=用户名 sudo ./deploy.sh` 可覆盖）。
 clone 到任意目录都行：`BaseDir` 运行时取二进制所在路径（main.go），面板状态 `data/` 和
 用户模板 `templates/` 都跟随它；游戏侧路径固定 `/home/games`（实例/备份/steamcmd），与面板位置无关。
 
 ```bash
 git clone <仓库地址> gspanel && cd gspanel          # 位置随意，脚本以所在目录为准
-./deploy.sh
+sudo ./deploy.sh                                  # 面板默认以调用者身份运行
 ```
 
 跑完按提示：`journalctl -u gspanel | grep 密码` 拿首次随机密码登录，
@@ -66,7 +70,7 @@ git clone <仓库地址> gspanel && cd gspanel          # 位置随意，脚本�
 ### 重新构建部署（改代码后）
 
 ```bash
-cd /root/gspanel && ./deploy.sh        # 本机路径；已安装环境只构建+重启面板，幂等
+cd ~/gspanel && sudo ./deploy.sh       # 本机路径（普通用户 ubuntu）；已安装环境只构建+重启面板，幂等
 ```
 
 面板重启不影响正在运行的游戏。需要 Go 1.22+（脚本会自动检测安装）。
@@ -170,6 +174,17 @@ curl -s -X POST localhost:8800/api/instances/palworld-1/command -H "$H" \
 
 ## 网络与安全
 
+### 运行身份与特权
+
+面板本身以普通用户运行，不落 root 家目录；需要 root 的动作集中在一个受审计的助手脚本：
+
+- `/usr/local/sbin/gspanel-priv`（root:root 0755，由 `deploy.sh` 安装）：只接受
+  `unit-write` / `unit-remove` / `ctl <start|stop|restart|enable|disable>` / `install-deps`，
+  unit 名严格匹配 `gspanel-<实例名>.service`
+- `/etc/sudoers.d/gspanel`：只授权面板运行用户执行上面这个脚本（root），以及 `(games)` 切换
+- 面板 unit 用 `AmbientCapabilities=CAP_CHOWN CAP_DAC_OVERRIDE`（写 games 属主文件后 chown 回 games）；
+  **不要设 `CapabilityBoundingSet`**，否则会连带限制 setuid root 的 sudo，缺 CAP_SETUID 就切不到 games
+
 - 面板只对 Tailscale 内网开放：`ufw status` 中 `8800/tcp ALLOW 100.64.0.0/10`
 - 公网应急通道（tailnet 挂了时）：
   `ssh -L 8800:127.0.0.1:8800 root@115.190.6.220 -p 10086`，然后开 `localhost:8800`
@@ -189,6 +204,12 @@ curl -s -X POST localhost:8800/api/instances/palworld-1/command -H "$H" \
 4. **steamcmd 报 "Missing configuration"**：删 `~/steamcmd/appcache` 与 `~/Steam/appcache` 重试。
 5. **systemctl show --value 多属性顺序不保证**，解析要用 key=value 形式。
 6. 修改 `Pal/Saved/` 下任何文件后属主保持 `games:games`，否则游戏写不动。
+7. **面板 unit 不能设 `CapabilityBoundingSet`**：setuid root 的 `sudo` 也受它约束，缺 CAP_SETUID 会导致
+   `sudo -u games` 失败（表现为「环境」页依赖检测全部 false）。面板自身权限用 `AmbientCapabilities` 限定即可。
+8. **Palworld 管理员给物品**：官方没有 give 类命令；原生 Linux 用**自行修复重编译的 UE4SS**（LD_PRELOAD+Lua mod）
+   实现，面板控制台页有「扩展: 在线玩家/给物品/给经验」按钮（走文件队列，非 RCON）。
+   全套补丁/脚本/说明在 `tools/palworld-ue4ss/`；注意 `start.sh` 的 `LD_PRELOAD` 会在面板重写 start.sh 后丢失，
+   游戏更新后用 `install-to-instance.sh` 重装。
 
 ## 测试
 
@@ -196,15 +217,15 @@ E2E（headless Chromium，真实浏览器回归）：
 
 ```bash
 # 1. 临时注入测试密码（测完恢复）
-cp /root/gspanel/data/config.json /tmp/cfg.bak
-python3 -c 'import json,hashlib;p="/root/gspanel/data/config.json";d=json.load(open(p));
+cp /home/ubuntu/gspanel/data/config.json /tmp/cfg.bak
+python3 -c 'import json,hashlib;p="/home/ubuntu/gspanel/data/config.json";d=json.load(open(p));
 d["password_salt"]="tmp_test_salt";d["password_hash"]=hashlib.sha256(b"tmp_test_salt:testpass123").hexdigest();
 json.dump(d,open(p,"w"))'
-systemctl restart gspanel
+sudo systemctl restart gspanel
 # 2. 跑测试（Node 22 在 /opt/node22，playwright 在 /root/e2e）
 cd /root/e2e && /opt/node22/bin/node panel.test.js
 # 3. 恢复
-cp /tmp/cfg.bak /root/gspanel/data/config.json && systemctl restart gspanel
+sudo cp /tmp/cfg.bak /home/ubuntu/gspanel/data/config.json && sudo systemctl restart gspanel
 ```
 
 前端是纯手写 JS（无框架），改完 `node --check static/app.js` 再过 E2E。
@@ -212,9 +233,10 @@ cp /tmp/cfg.bak /root/gspanel/data/config.json && systemctl restart gspanel
 ## 文件清单
 
 ```
-/root/gspanel/
+/home/ubuntu/gspanel/
 ├── gspanel            # 编译产物（运行时唯一需要的东西，已 gitignore）
 ├── deploy.sh          # 幂等一键部署：裸机全装 / 已装只构建+重启面板，saves/ 自动就位
+├── priv/gspanel-priv  # 特权助手（安装到 /usr/local/sbin）：写 unit / 启停实例 / 装依赖，参数严格校验
 ├── push-saves.sh      # 收各实例最新备份到 saves/ 作迁移种子（git 提交留人工）
 ├── saves/             # 迁移存档种子（<实例名>.tar.gz，每实例最新一份，git 跟踪）
 ├── *.go               # 后端：main/config/auth/api/instance/systemctl/steamcmd/events/
