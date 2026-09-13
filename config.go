@@ -40,6 +40,7 @@ type Instance struct {
 	ConfigValues map[string]map[string]string `json:"config_values,omitempty"`
 	Installed    bool                         `json:"installed"`
 	AutoUpdate   bool                         `json:"auto_update,omitempty"` // 轮询检测到新版本时自动更新
+	UE4SS        bool                         `json:"ue4ss,omitempty"`         // Palworld 扩展命令（UE4SS mod）：由面板安装并注入 start.sh
 	Schedules     []*Schedule       `json:"schedules,omitempty"`
 	CreatedAt     time.Time         `json:"created_at"`
 }

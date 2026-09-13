@@ -67,7 +67,8 @@ go vet ./...                                         # 无测试框架；临时�
 | scheduler.go | 计划任务（每日/间隔：重启、备份、更新）；`updateInstance`（手动/定时/自动更新共用入口）先比对 Steam buildid 预检，已最新则直接返回不停服（预检失败照旧更新）；`gracefulStop`：RCON 广播→存档→停；tick 里挂版本轮询入口与看门狗 `watchInstances` |
 | updatecheck.go | 版本轮询自动更新：实例开 `auto_update`（设置页开关，存 config.json）后，每 30 分钟用 api.steamcmd.net 查 public 分支 buildid 对比本地 `steamapps/appmanifest_<appid>.acf`，落后且实例无任务在跑（`HasRunningFor`）时更新。玩家门槛 `autoUpdateReady`：服务没开或模板无 `format=players` REST 命令→直接更；有玩家→广播通知（REST Broadcast 优先，每小时最多一次）并等待；无玩家持续 10 分钟（内存态 `autoStates`，面板重启重计）→才起 `auto-update` 任务走 `updateInstance` 流程（停→更→回写配置→拉起）。广播通知与首次无玩家两个等待节点会写事件日志 |
 | backup.go / monitor.go / netinfo.go / util.go | 备份打包/恢复（恢复后按面板记录重写 ini 端口/密码/服务器名）/上传（跨服迁移存档：新机建同名模板实例→上传备份包或 deploy 放好 saves/→恢复）；`backupAndSync`（手动/定时备份共用入口）备份成功后按 `sync_targets` 列表逐目标 rsync 异地同步（`syncBackup`，远端只留最新一份）；/proc 资源监控；公网 IP 探测；chown 等杂项 |
-| tools/palworld-ue4ss/ | Palworld 给物品完整方案：ue4ss-linux 源码补丁（8 个修复）、Lua mod（give/giveexp/玩家索引+文件队列）、UE5.1 布局表、构建/安装/卸载/硬链接副本测试脚本；先读其 README |
+| tools/palworld-ue4ss/ | Palworld 给物品的框架侧物料：ue4ss-linux 源码补丁（8 个修复）、build/install/uninstall/硬链接副本测试脚本；运行时资产（mod/布局表/设置）在 `assets/palworld-ue4ss/`（embed 进面板二进制） |
+| mods.go | Palworld 扩展命令（UE4SS）面板侧管理：二进制上传/导入/下载（`data/ue4ss/`）、实例安装/卸载/状态（`assets/palworld-ue4ss/` 下发 + start.sh 注入 + `Instance.UE4SS`） |
 
 ## 模板系统（改动重灾区，坑都在这）
 
@@ -106,10 +107,15 @@ ark-se / terraria / corekeeper / dst（饥荒联机版，343050，2026-07 新增
   我们用**自行修复并重编译的 ue4ss-linux**（LD_PRELOAD + Lua mod）实现；上游预编译版在 1.0.4 上必修的
   8 个 bug（GUObjectArray 校验/上限、GMalloc vtable 锚点、FMalloc vtable 基类槽数、FName 解析器与 ABI、
   `bit_cast_mfp` 零初始化、chunk 遍历越界）全部在 `tools/palworld-ue4ss/patches/` + README 里。
-  面板：控制台页多个「扩展: 在线玩家/给物品/给经验」按钮（`api.go` `mod-command` + 文件队列
+  面板：**面板原生管理**——「设置/环境 → Palworld 扩展命令」上传/按路径导入/URL 下载 libUE4SS.so
+  （存 `data/ue4ss/libUE4SS.so`，不入 git），实例「设置 → 扩展命令」一键安装/卸载/更新
+  （`mods.go` + `Instance.UE4SS` 标志）；
+  `writeStartScript` 在 `UE4SS=true` 时生成 `exec env LD_PRELOAD=... 游戏二进制`（LD_PRELOAD 绝不能进 shell），
+  所以面板重写 start.sh 不再丢注入。
+  控制台页有「扩展: 在线玩家/给物品/给经验」按钮（`api.go` `mod-command` + 文件队列
   `<实例>/Pal/Binaries/Linux/gspanel-mod/cmd.txt|res.txt`，因为 ProcessConsoleExec hook 在本游戏装不上）。
-  **注意**：`start.sh` 里有 `LD_PRELOAD=`（绝不能进 shell），面板安装/更新会重写 start.sh 丢掉它，
-  游戏更新后需重跑 `tools/palworld-ue4ss/install-to-instance.sh`；
+  内置资产（mod/布局表/设置）在 `assets/palworld-ue4ss/`（embed 进二进制，安装时下发）；
+  框架补丁/构建脚本/硬链接副本测试在 `tools/palworld-ue4ss/`（游戏更新后重新编译 .so 并在面板重新「安装」即可）；
   **mod 的 Lua 语法/加载期错误会抛 C++ 异常直接 abort 游戏进程**（libsteam_api 的
   `__gxx_personality_v0` 冲突），改完 mod 必须先 `luac5.4 -p` 校验（已踩坑：Lua 5.4 无全局 unpack、
   嵌套函数不能用 `...`）。截至 2026-09-13 已实测：UE4SS 完整初始化（FindAllOf/StaticFindObject/

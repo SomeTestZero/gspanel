@@ -33,10 +33,22 @@
 
 ## 3. 部署 / 使用
 
+### 方式 A：面板管理（推荐，当前生产用的就是这个）
+
+1. 「设置/环境 → Palworld 扩展命令」：上传/按服务器路径导入/URL 下载 `libUE4SS.so`
+   （存 `data/ue4ss/libUE4SS.so`，不入 git）；
+2. 实例「设置 → 扩展命令」：点「安装」下发资产并注入 `start.sh`，重启实例生效；
+   「卸载」会恢复原始 `start.sh` 并删除注入文件。
+
+框架 `.so` 用下面的脚本编译后，用「按路径导入」填入 `/home/games/ue4ss-build/libUE4SS.so` 即可。
+mod/布局表由面板从 `assets/palworld-ue4ss/`（embed 进二进制）下发，改 mod 后重新点「安装」。
+
+### 方式 B：命令行脚本（无面板/离线部署）
+
 ```bash
 # 一键编译（约 30-60 分钟；需要 gcc-13 + rustup，见脚本注释）
 tools/palworld-ue4ss/build-ue4ss.sh /tmp/ue4ss-src
-# 安装到实例（会备份原 start.sh 为 start.sh.pre-ue4ss）
+# 安装到实例（会备份原 start.sh 为 start.sh.pre-ue4ss，资产从 ../../assets/palworld-ue4ss 拷贝）
 sudo tools/palworld-ue4ss/install-to-instance.sh /home/games/instances/palworld-1 \
      /tmp/ue4ss-src/build/Game__Dev__Linux64/lib/libUE4SS.so
 sudo systemctl restart gspanel-palworld-1
@@ -106,14 +118,17 @@ sudo tools/palworld-ue4ss/uninstall-from-instance.sh /home/games/instances/palwo
 ## 6. 目录内容
 
 ```
-tools/palworld-ue4ss/
-├── README.md                       # 本文件
-├── patch-ue4ss-glibc.py            # （旧）预编译版 glibc 2.38→2.2.5 降级，源码编译用不到
-├── shim/                           # （旧）GLIBC 2.38 垫片，源码编译用不到
-├── patches/ue4ss-linux-palworld-1.0.4.patch   # 全部源码修复
-├── build-ue4ss.sh / install-to-instance.sh / uninstall-from-instance.sh
-├── test-ue4ss.sh                   # 硬链接副本安全试跑（新构建验证用）
-├── layouts/{MemberVariableLayout,VTableLayout}.ini   # UE5.1 模板（运行时必需）
+assets/palworld-ue4ss/               # 运行时资产（embed 进面板二进制，安装时下发）
+├── layouts/{MemberVariableLayout,VTableLayout}.ini
+├── mod/scripts/main.lua             # 给物品/给经验/在线玩家 + cmd.txt/res.txt 文件队列
 ├── UE4SS-settings.ini / mods.txt
-└── mod/scripts/main.lua            # 给物品/给经验/在线玩家 + 文件队列
+
+tools/palworld-ue4ss/                # 框架侧物料（不参与面板构建）
+├── README.md                        # 本文件
+├── patches/ue4ss-linux-palworld-1.0.4.patch   # 全部源码修复（指向 fork）
+├── build-ue4ss.sh                   # 从 fork 源码编译带修复的 libUE4SS.so
+├── install-to-instance.sh / uninstall-from-instance.sh
+├── test-ue4ss.sh                    # 硬链接副本安全试跑（新构建验证用）
+├── patch-ue4ss-glibc.py / shim/     # （旧）预编译版 glibc 垫片，源码编译用不到
+└── mod/template-console-buttons.json
 ```

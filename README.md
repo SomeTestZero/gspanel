@@ -207,9 +207,11 @@ curl -s -X POST localhost:8800/api/instances/palworld-1/command -H "$H" \
 7. **面板 unit 不能设 `CapabilityBoundingSet`**：setuid root 的 `sudo` 也受它约束，缺 CAP_SETUID 会导致
    `sudo -u games` 失败（表现为「环境」页依赖检测全部 false）。面板自身权限用 `AmbientCapabilities` 限定即可。
 8. **Palworld 管理员给物品**：官方没有 give 类命令；原生 Linux 用**自行修复重编译的 UE4SS**（LD_PRELOAD+Lua mod）
-   实现，面板控制台页有「扩展: 在线玩家/给物品/给经验」按钮（走文件队列，非 RCON）。
-   全套补丁/脚本/说明在 `tools/palworld-ue4ss/`；注意 `start.sh` 的 `LD_PRELOAD` 会在面板重写 start.sh 后丢失，
-   游戏更新后用 `install-to-instance.sh` 重装。
+   实现。面板原生管理：「设置/环境 → Palworld 扩展命令」上传/导入/下载框架二进制，
+   实例「设置 → 扩展命令」一键安装/卸载/更新（安装后重启生效），控制台页出现
+   「扩展: 在线玩家/给物品/给经验」按钮（走文件队列，非 RCON）。
+   框架补丁与构建脚本在 `tools/palworld-ue4ss/`，运行时资产在 `assets/palworld-ue4ss/`（embed 进面板）；
+   游戏更新后重新编译 `libUE4SS.so` 并在面板重新「安装」即可。
 
 ## 测试
 

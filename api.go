@@ -87,6 +87,7 @@ func (sv *Server) instanceView(inst *Instance) map[string]any {
 		view["public_ports"] = pp
 	}
 	view["has_give_mod"] = hasGiveMod(inst)
+	view["ue4ss"] = ue4ssStatus(inst)
 	return view
 }
 
@@ -97,14 +98,7 @@ func modQueueDir(inst *Instance) string {
 	return inst.Dir + "/Pal/Binaries/Linux/gspanel-mod"
 }
 
-// hasGiveMod：实例是否装了 gspanel 扩展命令 mod
-func hasGiveMod(inst *Instance) bool {
-	if _, err := os.Stat(inst.Dir + "/Pal/Binaries/Linux/Mods/gspanel/scripts/main.lua"); err != nil {
-		return false
-	}
-	st, err := os.Stat(modQueueDir(inst))
-	return err == nil && st.IsDir()
-}
+// hasGiveMod：实例是否装了 gspanel 扩展命令 mod（定义在 mods.go）
 
 var modCmdMu sync.Mutex
 
@@ -221,6 +215,11 @@ func (sv *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/instances/{name}/console/stream", sv.auth(sv.handleConsoleStream))
 	mux.HandleFunc("POST /api/instances/{name}/command", sv.auth(sv.handleCommand))
 	mux.HandleFunc("POST /api/instances/{name}/mod-command", sv.auth(sv.handleModCommand))
+	mux.HandleFunc("POST /api/instances/{name}/ue4ss", sv.auth(sv.handleInstanceUE4SS))
+	mux.HandleFunc("GET /api/ue4ss", sv.auth(sv.handleUE4SSInfo))
+	mux.HandleFunc("POST /api/ue4ss/upload", sv.auth(sv.handleUE4SSUpload))
+	mux.HandleFunc("POST /api/ue4ss/import", sv.auth(sv.handleUE4SSImport))
+	mux.HandleFunc("POST /api/ue4ss/download", sv.auth(sv.handleUE4SSDownload))
 
 	mux.HandleFunc("GET /api/instances/{name}/config", sv.auth(sv.handleReadConfig))
 	mux.HandleFunc("PUT /api/instances/{name}/config", sv.auth(sv.handleWriteConfig))

@@ -35,9 +35,12 @@ BIN="$DST/Pal/Binaries/Linux"; RT="$BIN/gspanel-runtime"
 mkdir -p "$BIN/Mods/gspanel/scripts" "$RT"
 cp "$UE4SS_SO" "$BIN/libUE4SS.so"
 cp "$(dirname "$0")/shim/libglibc238shim.so" "$RT/" 2>/dev/null || { bash "$(dirname "$0")/shim/build.sh"; cp "$(dirname "$0")/shim/libglibc238shim.so" "$RT/"; }
-cp "$(dirname "$0")/mod/scripts/main.lua" "$BIN/Mods/gspanel/scripts/main.lua"
-cp "$(dirname "$0")/mods.txt" "$BIN/Mods/mods.txt"
-cp "$(dirname "$0")/UE4SS-settings.ini" "$BIN/UE4SS-settings.ini"
+ASSETS="$(cd "$(dirname "$0")/../.." && pwd)/assets/palworld-ue4ss"
+cp "$ASSETS/mod/scripts/main.lua" "$BIN/Mods/gspanel/scripts/main.lua"
+cp "$ASSETS/mods.txt" "$BIN/Mods/mods.txt"
+cp "$ASSETS/UE4SS-settings.ini" "$BIN/UE4SS-settings.ini"
+cp "$ASSETS/layouts/MemberVariableLayout.ini" "$BIN/MemberVariableLayout.ini" 2>/dev/null || true
+cp "$ASSETS/layouts/VTableLayout.ini" "$BIN/VTableLayout.ini" 2>/dev/null || true
 # 新 libstdc++：从 PPA deb 解出来放这里（见 README），没有就先只用系统版本
 if [ -f "${STDCPP_SO:-}" ]; then cp "$STDCPP_SO" "$RT/libstdc++.so.6"; fi
 chown -R games:games "$DST"

@@ -152,11 +152,24 @@ func writeStartScript(inst *Instance, tmpl *GameTemplate) error {
 	for k, v := range inst.Env {
 		fmt.Fprintf(&b, "export %s=%s\n", k, shellQuote(v))
 	}
-	fmt.Fprintf(&b, "exec %s", tmpl.Executable)
-	for _, a := range inst.Args {
-		fmt.Fprintf(&b, " %s", shellQuote(a))
+	if inst.UE4SS && tmpl.ID == "palworld" {
+		// UE4SS：LD_PRELOAD 只能作用于游戏二进制。PalServer.sh 是 shell 包装，
+		// 若把 LD_PRELOAD 带进 /bin/sh，UE4SS 构造器会在非 UE 进程里段错误。
+		b.WriteString("# Palworld 扩展命令（UE4SS）：直接 exec 底层二进制（见 tools/palworld-ue4ss/README.md）\n")
+		b.WriteString("if [ ! -f Pal/Binaries/Linux/steamclient.so ]; then cp linux64/steamclient.so Pal/Binaries/Linux/steamclient.so 2>/dev/null || true; fi\n")
+		b.WriteString("chmod +x Pal/Binaries/Linux/PalServer-Linux-Shipping 2>/dev/null || true\n")
+		b.WriteString("exec env LD_PRELOAD=\"$PWD/Pal/Binaries/Linux/libUE4SS.so\" Pal/Binaries/Linux/PalServer-Linux-Shipping Pal")
+		for _, a := range inst.Args {
+			fmt.Fprintf(&b, " %s", shellQuote(a))
+		}
+		b.WriteString("\n")
+	} else {
+		fmt.Fprintf(&b, "exec %s", tmpl.Executable)
+		for _, a := range inst.Args {
+			fmt.Fprintf(&b, " %s", shellQuote(a))
+		}
+		b.WriteString("\n")
 	}
-	b.WriteString("\n")
 	path := filepath.Join(inst.Dir, "start.sh")
 	if err := os.WriteFile(path, []byte(b.String()), 0755); err != nil {
 		return err

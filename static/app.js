@@ -62,6 +62,17 @@ async function api(path, opts = {}) {
   if (!r.ok) throw new Error(data.error || ("HTTP " + r.status));
   return data;
 }
+/* 不带 15s 超时的 POST（下载/上传大文件用） */
+async function apiLong(path, body) {
+  const r = await fetch(path, {
+    method: "POST", credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || ("HTTP " + r.status));
+  return d;
+}
 function clearTimers() {
   S.pollers.forEach(clearInterval);
   S.pollers = [];
@@ -769,6 +780,11 @@ function settingsTab(inst, tmpl) {
     <h3>systemd 服务</h3>
     <div class="mono">gspanel-${esc(inst.name)}.service（开机自启，崩溃自动拉起）</div>
   </div>
+  ${inst.template === "palworld" ? `
+  <div class="card">
+    <h3>扩展命令（UE4SS）</h3>
+    <div id="ue4ssBox" class="dim">加载中...</div>
+  </div>` : ""}
   <div class="card">
     <h3 style="color:var(--red)">危险操作</h3>
     <button class="danger small" id="instDelete">删除实例</button>
@@ -791,6 +807,42 @@ function initSettingsTab(inst, tmpl) {
       nav("dashboard");
     } catch (e) { toast(e.message, false); }
   };
+  initUE4SSBox(inst);
+}
+
+/* 实例设置：UE4SS 扩展命令状态与安装/卸载 */
+function initUE4SSBox(inst) {
+  const box = document.getElementById("ue4ssBox");
+  if (!box) return;
+  const badge = (ok, t) => `<span class="badge ${ok ? "green" : "red"}">${t}</span>`;
+  const render = (st) => {
+    st = st || inst.ue4ss || {};
+    const bin = st.binary || {};
+    box.innerHTML = `
+      <div>框架二进制：${bin.exists ? badge(true, `已就绪 ${fmtBytes(bin.size)}`) : badge(false, "未提供")}
+        <span class="hint mono">${esc(bin.path || "")}</span></div>
+      <div class="mt">实例状态：${badge(st.installed, "libUE4SS.so")} ${badge(st.mod, "gspanel mod")} ${badge(st.queue, "命令队列")} ${badge(st.start_patched, "start.sh 已注入")}</div>
+      <div class="form-actions">
+        <button class="primary small" id="ue4ssInstall">${st.installed ? "重新安装 / 更新" : "安装"}</button>
+        ${st.installed ? `<button class="small danger" id="ue4ssUninstall">卸载</button>` : ""}
+      </div>
+      <div class="hint">安装/卸载后需重启实例生效；「控制台」页会出现「扩展: 在线玩家 / 给物品… / 给经验…」按钮。
+      二进制在「设置/环境」页上传、从本机路径导入或从 URL 下载。</div>`;
+    const run = async (action) => {
+      try {
+        const r = await api(`/api/instances/${inst.name}/ue4ss`, { method: "POST", body: { action } });
+        toast(action === "uninstall" ? "已卸载，重启实例后生效" : "已安装，重启实例后生效");
+        render(r.ue4ss);
+      } catch (e) { toast(e.message, false); }
+    };
+    const ib = document.getElementById("ue4ssInstall");
+    if (ib) ib.onclick = () => run("install");
+    const ub = document.getElementById("ue4ssUninstall");
+    if (ub) ub.onclick = () => {
+      if (confirm("卸载 UE4SS 扩展命令？\n将恢复原始 start.sh 并删除注入文件（mod 与命令队列一并移除），重启后生效。")) run("uninstall");
+    };
+  };
+  render(inst.ue4ss);
 }
 
 /* ---------- 新建实例 ---------- */
@@ -1035,6 +1087,10 @@ async function renderSettings() {
       <div class="hint">每次备份（手动/定时）成功后，自动用 rsync 把最新备份包推送到各目标主机的 ~/gspanel-saves/，远端只保留最新一份。需本机（root）已配置到目标主机的 SSH 免密登录；任一目标同步失败都会让备份任务标记为失败并写入事件日志。</div>
     </div>
     <div class="card">
+      <h3>Palworld 扩展命令（UE4SS）</h3>
+      <div id="ue4ssGlobal" class="dim">加载中...</div>
+    </div>
+    <div class="card">
       <h3>修改管理员密码</h3>
       <div class="form-row">
         <div><label>原密码</label><input type="password" id="oldPw"></div>
@@ -1080,6 +1136,63 @@ async function renderSettings() {
       }});
       toast("密码已修改");
     } catch (e) { toast(e.message, false); }
+  };
+  initUE4SSGlobal();
+}
+
+/* 设置页：UE4SS 框架二进制管理（上传 / 导入 / 下载） */
+async function initUE4SSGlobal() {
+  const box = document.getElementById("ue4ssGlobal");
+  if (!box) return;
+  let info;
+  try { info = await api("/api/ue4ss"); } catch (e) { box.textContent = "读取失败: " + e.message; return; }
+  const bin = info.binary || {};
+  box.innerHTML = `
+    <div>当前二进制：${bin.exists
+      ? `<span class="badge green">已就绪</span> <span class="mono">${esc(bin.path)}</span>（${fmtBytes(bin.size)}，sha256 <span class="mono">${esc((bin.sha256 || "").slice(0, 12))}…</span>，${esc(bin.modified || "")}）`
+      : `<span class="badge red">未提供</span> <span class="hint">先在上传/导入/下载一种方式提供 libUE4SS.so，再到实例「设置 → 扩展命令」安装</span>`}</div>
+    <div class="form-row mt">
+      <div><label>上传 libUE4SS.so</label><input type="file" id="ue4ssFile"></div>
+      <div><label>或从服务器本机路径导入</label><input id="ue4ssPath" class="mono" placeholder="/home/games/ue4ss-build/libUE4SS.so"></div>
+    </div>
+    <div class="form-row">
+      <div style="flex:1"><label>或从 URL 下载（例如你 fork 的 release 直链）</label><input id="ue4ssUrl" class="mono" placeholder="https://github.com/SomeTestZero/ue4ss-linux/releases/download/.../libUE4SS.so"></div>
+    </div>
+    <div class="form-actions">
+      <button class="primary small" id="ue4ssUploadBtn">上传</button>
+      <button class="small" id="ue4ssImportBtn">按路径导入</button>
+      <button class="small" id="ue4ssDownloadBtn">从 URL 下载</button>
+    </div>
+    <div class="hint">二进制保存在 <span class="mono">${esc(info.asset_dir)}/libUE4SS.so</span>（不入 git）。编译方法见仓库 <span class="mono">tools/palworld-ue4ss/README.md</span>；mod 源码在 <span class="mono">assets/palworld-ue4ss/</span>，改完在实例里重新「安装」即可下发。</div>`;
+  const busy = (btn, on, label) => { btn.disabled = on; btn.textContent = label; };
+  const up = document.getElementById("ue4ssUploadBtn");
+  up.onclick = async () => {
+    const f = document.getElementById("ue4ssFile").files[0];
+    if (!f) { toast("请先选择 libUE4SS.so 文件", false); return; }
+    const fd = new FormData();
+    fd.append("file", f);
+    busy(up, true, "上传中…");
+    try {
+      const r = await fetch("/api/ue4ss/upload", { method: "POST", credentials: "same-origin", body: fd });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || ("HTTP " + r.status));
+      toast("上传成功（" + fmtBytes(d.binary.size) + "）");
+      initUE4SSGlobal();
+    } catch (e) { toast(e.message, false); busy(up, false, "上传"); }
+  };
+  document.getElementById("ue4ssImportBtn").onclick = async () => {
+    const p = document.getElementById("ue4ssPath").value.trim();
+    if (!p) { toast("请输入绝对路径", false); return; }
+    try { const r = await api("/api/ue4ss/import", { method: "POST", body: { path: p } }); toast("导入成功（" + fmtBytes(r.binary.size) + "）"); initUE4SSGlobal(); }
+    catch (e) { toast(e.message, false); }
+  };
+  document.getElementById("ue4ssDownloadBtn").onclick = async () => {
+    const u = document.getElementById("ue4ssUrl").value.trim();
+    if (!u) { toast("请输入下载 URL", false); return; }
+    const btn = document.getElementById("ue4ssDownloadBtn");
+    busy(btn, true, "下载中…");
+    try { const r = await apiLong("/api/ue4ss/download", { url: u }); toast("下载成功（" + fmtBytes(r.binary.size) + "）"); initUE4SSGlobal(); }
+    catch (e) { toast(e.message, false); busy(btn, false, "从 URL 下载"); }
   };
 }
 

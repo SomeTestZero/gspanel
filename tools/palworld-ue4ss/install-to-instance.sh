@@ -11,11 +11,13 @@ set -euo pipefail
 INST=${1:?用法: install-to-instance.sh <实例目录> [libUE4SS.so]}
 SO=${2:-/home/games/ue4ss-build/libUE4SS.so}
 TOOLDIR="$(cd "$(dirname "$0")" && pwd)"
+ASSETS="$TOOLDIR/../../assets/palworld-ue4ss"  # 面板仓库内置资产（面板接口用的也是这一份）
 BIN="$INST/Pal/Binaries/Linux"
 
 [ "$(id -u)" = 0 ] || { echo "需要 root（或用 sudo）"; exit 1; }
 [ -x "$BIN/PalServer-Linux-Shipping" ] || { echo "不是 Palworld 实例目录: $INST"; exit 1; }
 [ -f "$SO" ] || { echo "找不到 libUE4SS.so: $SO（先跑 build-ue4ss.sh）"; exit 1; }
+[ -f "$ASSETS/mod/scripts/main.lua" ] || { echo "找不到内置资产: $ASSETS（请在 gspanel 仓库根目录执行）"; exit 1; }
 
 echo "== 1/4 备份 start.sh（只备份一次）"
 [ -f "$INST/start.sh.pre-ue4ss" ] || cp -a "$INST/start.sh" "$INST/start.sh.pre-ue4ss"
@@ -23,17 +25,17 @@ echo "== 1/4 备份 start.sh（只备份一次）"
 echo "== 2/4 安装 libUE4SS.so / 布局表 / 设置 / mod"
 # Lua 语法必须先验：UE4SS 的语法错误会抛 C++ 异常直接 abort 整个游戏进程
 if command -v luac5.4 >/dev/null; then
-  luac5.4 -p "$TOOLDIR/mod/scripts/main.lua" || { echo "mod 有 Lua 语法错误，已中止"; exit 1; }
+  luac5.4 -p "$ASSETS/mod/scripts/main.lua" || { echo "mod 有 Lua 语法错误，已中止"; exit 1; }
 fi
 cp "$SO" "$BIN/libUE4SS.so"
-cp "$TOOLDIR/layouts/MemberVariableLayout.ini" "$BIN/MemberVariableLayout.ini"
-cp "$TOOLDIR/layouts/VTableLayout.ini" "$BIN/VTableLayout.ini"
-cp "$TOOLDIR/UE4SS-settings.ini" "$BIN/UE4SS-settings.ini"
+cp "$ASSETS/layouts/MemberVariableLayout.ini" "$BIN/MemberVariableLayout.ini"
+cp "$ASSETS/layouts/VTableLayout.ini" "$BIN/VTableLayout.ini"
+cp "$ASSETS/UE4SS-settings.ini" "$BIN/UE4SS-settings.ini"
 # 实例根也放一份（UE4SS 的工作目录兼容）
-cp "$TOOLDIR/layouts/MemberVariableLayout.ini" "$INST/MemberVariableLayout.ini"
-cp "$TOOLDIR/layouts/VTableLayout.ini" "$INST/VTableLayout.ini"
+cp "$ASSETS/layouts/MemberVariableLayout.ini" "$INST/MemberVariableLayout.ini"
+cp "$ASSETS/layouts/VTableLayout.ini" "$INST/VTableLayout.ini"
 mkdir -p "$BIN/Mods/gspanel/scripts" "$BIN/gspanel-mod"
-cp "$TOOLDIR/mod/scripts/main.lua" "$BIN/Mods/gspanel/scripts/main.lua"
+cp "$ASSETS/mod/scripts/main.lua" "$BIN/Mods/gspanel/scripts/main.lua"
 printf 'gspanel : 1\n' > "$BIN/Mods/mods.txt"
 
 echo "== 3/4 生成 start.sh（LD_PRELOAD 只对游戏二进制生效，绝不能进 shell）"
