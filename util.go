@@ -31,8 +31,15 @@ func chownRecursive(root string) {
 	_ = exec.Command("chown", "-R", GamesUser+":"+GamesUser, root).Run()
 }
 
-// cmdAsGames 以 games 用户身份构造命令
+// cmdAsGames 以 games 用户身份构造命令。
+// root 运行时用 Credential 直接切换；普通用户运行（推荐）走 sudo -u games，
+// sudo 切用户时会清掉能力位，游戏侧进程不会继承面板的 CAP_CHOWN 等。
 func cmdAsGames(name string, args ...string) *exec.Cmd {
+	if os.Geteuid() != 0 {
+		full := append([]string{"-n", "-u", GamesUser, "env",
+			"HOME=" + GamesHome, "USER=" + GamesUser, "STEAM_HOME=" + GamesHome, name}, args...)
+		return exec.Command("sudo", full...)
+	}
 	cmd := exec.Command(name, args...)
 	if gamesUID != 0 {
 		cmd.SysProcAttr = &syscall.SysProcAttr{

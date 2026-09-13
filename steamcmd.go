@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 )
 
@@ -95,11 +96,16 @@ func cmdOk(name string, args ...string) bool {
 	return cmdAsGames(name, args...).Run() == nil
 }
 
-// installDeps 安装系统依赖（root 直接执行 apt）
+// installDeps 安装系统依赖（root 直接执行 apt；普通用户经特权助手）
 func installDeps(ctx context.Context, log io.Writer) error {
 	fmt.Fprintln(log, "安装 32 位运行库 lib32gcc-s1 / lib32stdc++6 ...")
-	c := newCancellableCmd(ctx, "bash", "-c",
-		"apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq lib32gcc-s1 lib32stdc++6")
+	var c *exec.Cmd
+	if os.Geteuid() == 0 {
+		c = newCancellableCmd(ctx, "bash", "-c",
+			"apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq lib32gcc-s1 lib32stdc++6")
+	} else {
+		c = newCancellableCmd(ctx, "sudo", "-n", privHelper, "install-deps")
+	}
 	c.Stdout, c.Stderr = log, log
 	if err := c.Run(); err != nil {
 		return fmt.Errorf("apt 安装失败: %w", err)

@@ -44,23 +44,38 @@ WantedBy=multi-user.target
 `, tmpl.Name, inst.Name, GamesUser, GamesUser, inst.Dir, inst.Dir, logFile)
 }
 
+// privHelper 特权助手：普通用户运行面板时，写 unit / 启停实例经 sudo 调用它。
+const privHelper = "/usr/local/sbin/gspanel-priv"
+
 // writeUnit 写入 unit 并 reload；start.sh 需已生成
 func writeUnit(inst *Instance, tmpl *GameTemplate) error {
 	content := renderUnit(inst, tmpl)
-	if err := os.WriteFile(unitPath(inst), []byte(content), 0644); err != nil {
-		return fmt.Errorf("写 unit 文件: %w", err)
+	if os.Geteuid() == 0 {
+		if err := os.WriteFile(unitPath(inst), []byte(content), 0644); err != nil {
+			return fmt.Errorf("写 unit 文件: %w", err)
+		}
+		if out, err := exec.Command("systemctl", "daemon-reload").CombinedOutput(); err != nil {
+			return fmt.Errorf("daemon-reload: %s", strings.TrimSpace(string(out)))
+		}
+		return nil
 	}
-	if out, err := exec.Command("systemctl", "daemon-reload").CombinedOutput(); err != nil {
-		return fmt.Errorf("daemon-reload: %s", strings.TrimSpace(string(out)))
+	cmd := exec.Command("sudo", "-n", privHelper, "unit-write", unitName(inst))
+	cmd.Stdin = strings.NewReader(content)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("写 unit 文件: %s", strings.TrimSpace(string(out)))
 	}
 	return nil
 }
 
 func removeUnit(inst *Instance) {
-	_ = exec.Command("systemctl", "stop", unitName(inst)).Run()
-	_ = exec.Command("systemctl", "disable", unitName(inst)).Run()
-	_ = os.Remove(unitPath(inst))
-	_ = exec.Command("systemctl", "daemon-reload").Run()
+	if os.Geteuid() == 0 {
+		_ = exec.Command("systemctl", "stop", unitName(inst)).Run()
+		_ = exec.Command("systemctl", "disable", unitName(inst)).Run()
+		_ = os.Remove(unitPath(inst))
+		_ = exec.Command("systemctl", "daemon-reload").Run()
+		return
+	}
+	_ = exec.Command("sudo", "-n", privHelper, "unit-remove", unitName(inst)).Run()
 }
 
 func systemctl(args ...string) (string, error) {
@@ -68,9 +83,19 @@ func systemctl(args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
+// systemctlPriv 改变系统状态的动作（start/stop/enable…）：root 直接执行，
+// 普通用户经特权助手 sudo；只读的 show 不走这里。
+func systemctlPriv(action string, inst *Instance) (string, error) {
+	if os.Geteuid() == 0 {
+		return systemctl(action, unitName(inst))
+	}
+	out, err := exec.Command("sudo", "-n", privHelper, "ctl", action, unitName(inst)).CombinedOutput()
+	return strings.TrimSpace(string(out)), err
+}
+
 // enableUnit 开机自启
 func enableUnit(inst *Instance) error {
-	if out, err := systemctl("enable", unitName(inst)); err != nil {
+	if out, err := systemctlPriv("enable", inst); err != nil {
 		return fmt.Errorf("enable: %s", out)
 	}
 	return nil

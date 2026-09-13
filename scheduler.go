@@ -127,7 +127,7 @@ func (sv *Server) gracefulRestart(ctx context.Context, log io.Writer, inst *Inst
 		if err := sv.applySavedConfig(inst, tmpl); err != nil {
 			return err
 		}
-		if _, err := systemctl("start", unitName(inst)); err != nil {
+		if _, err := systemctlPriv("start", inst); err != nil {
 			return fmt.Errorf("启动失败: %s", err)
 		}
 		return nil
@@ -139,7 +139,7 @@ func (sv *Server) gracefulRestart(ctx context.Context, log io.Writer, inst *Inst
 	if err := sv.applySavedConfig(inst, tmpl); err != nil {
 		return err
 	}
-	if _, err := systemctl("start", unitName(inst)); err != nil {
+	if _, err := systemctlPriv("start", inst); err != nil {
 		return fmt.Errorf("启动失败: %s", err)
 	}
 	return nil
@@ -175,7 +175,7 @@ func (sv *Server) gracefulStop(ctx context.Context, log io.Writer, inst *Instanc
 		}
 		fmt.Fprintln(log, "优雅关闭超时，强制停止")
 	}
-	if _, err := systemctl("stop", unitName(inst)); err != nil {
+	if _, err := systemctlPriv("stop", inst); err != nil {
 		return fmt.Errorf("停止失败: %s", err)
 	}
 	return nil
@@ -212,7 +212,7 @@ func (sv *Server) newWorld(ctx context.Context, log io.Writer, inst *Instance, t
 		if err := sv.applySavedConfig(inst, tmpl); err != nil {
 			return err
 		}
-		if _, err := systemctl("start", unitName(inst)); err != nil {
+		if _, err := systemctlPriv("start", inst); err != nil {
 			return fmt.Errorf("启动失败: %s", err)
 		}
 	} else {
@@ -255,7 +255,7 @@ func (sv *Server) updateInstance(ctx context.Context, log io.Writer, inst *Insta
 		if err := sv.applySavedConfig(inst, tmpl); err != nil {
 			return err
 		}
-		if _, err := systemctl("start", unitName(inst)); err != nil {
+		if _, err := systemctlPriv("start", inst); err != nil {
 			return fmt.Errorf("启动失败: %s", err)
 		}
 	}

@@ -28,7 +28,11 @@ const (
 var BaseDir = func() string {
 	exe, err := os.Executable()
 	if err != nil {
-		return "/root/gspanel"
+		wd, werr := os.Getwd()
+		if werr != nil {
+			return "."
+		}
+		return wd
 	}
 	if p, err := filepath.EvalSymlinks(exe); err == nil {
 		exe = p

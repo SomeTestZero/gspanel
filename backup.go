@@ -155,7 +155,7 @@ func (sv *Server) restoreBackup(ctx context.Context, log io.Writer, inst *Instan
 	wasRunning := st.ActiveState == "active"
 	if wasRunning {
 		fmt.Fprintln(log, "停止服务器...")
-		if _, err := systemctl("stop", unitName(inst)); err != nil {
+		if _, err := systemctlPriv("stop", inst); err != nil {
 			return fmt.Errorf("停止失败: %s", err)
 		}
 	}
@@ -175,7 +175,7 @@ func (sv *Server) restoreBackup(ctx context.Context, log io.Writer, inst *Instan
 	chownRecursive(inst.Dir)
 	if wasRunning {
 		fmt.Fprintln(log, "重新启动服务器...")
-		if _, err := systemctl("start", unitName(inst)); err != nil {
+		if _, err := systemctlPriv("start", inst); err != nil {
 			return fmt.Errorf("启动失败: %s", err)
 		}
 	}

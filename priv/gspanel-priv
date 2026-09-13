@@ -1,0 +1,54 @@
+#!/bin/bash
+# GSPanel 特权助手（必须以 root 运行）。面板以普通用户运行后，只有这里需要 root：
+#   - 写/删 /etc/systemd/system/gspanel-*.service 并 daemon-reload
+#   - start/stop/restart/enable/disable gspanel-* 实例
+#   - 安装 32 位运行库（apt）
+# 通过 /etc/sudoers.d/gspanel 仅授权面板运行用户执行本脚本，参数在此严格校验。
+set -euo pipefail
+
+UNIT_DIR=/etc/systemd/system
+
+die() { echo "gspanel-priv: $*" >&2; exit 1; }
+
+# 实例名规则与面板一致：小写字母/数字/中划线，2-30 字符（见 instanceNameRe）
+valid_unit() {
+  [[ "$1" =~ ^gspanel-[a-z0-9][a-z0-9-]{1,29}\.service$ ]]
+}
+
+case "${1:-}" in
+  unit-write)
+    name=${2:-}
+    valid_unit "$name" || die "非法 unit 名: ${name:-}"
+    umask 022
+    cat > "$UNIT_DIR/$name"
+    chown root:root "$UNIT_DIR/$name"
+    chmod 0644 "$UNIT_DIR/$name"
+    systemctl daemon-reload
+    ;;
+  unit-remove)
+    name=${2:-}
+    valid_unit "$name" || die "非法 unit 名: ${name:-}"
+    systemctl stop "$name" >/dev/null 2>&1 || true
+    systemctl disable "$name" >/dev/null 2>&1 || true
+    rm -f "$UNIT_DIR/$name"
+    systemctl daemon-reload
+    ;;
+  ctl)
+    action=${2:-}
+    name=${3:-}
+    valid_unit "$name" || die "非法 unit 名: ${name:-}"
+    case "$action" in
+      start|stop|restart|enable|disable) ;;
+      *) die "非法动作: ${action:-}（可用 start/stop/restart/enable/disable）" ;;
+    esac
+    exec systemctl "$action" "$name"
+    ;;
+  install-deps)
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq
+    apt-get install -y -qq lib32gcc-s1 lib32stdc++6
+    ;;
+  *)
+    die "未知子命令: ${1:-}（可用 unit-write/unit-remove/ctl/install-deps）"
+    ;;
+esac
