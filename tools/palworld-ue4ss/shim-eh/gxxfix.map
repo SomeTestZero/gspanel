@@ -1,0 +1,6 @@
+CXXABI_1.3 {
+  global:
+    __gxx_personality_v0;
+  local:
+    *;
+};

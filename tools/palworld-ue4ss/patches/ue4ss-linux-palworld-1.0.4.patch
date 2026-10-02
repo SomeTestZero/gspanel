@@ -1,8 +1,8 @@
 diff --git a/UE4SS/CMakeLists.txt b/UE4SS/CMakeLists.txt
-index 22dd1d0..859cd4d 100644
+index 22dd1d0..6ae21b0 100644
 --- a/UE4SS/CMakeLists.txt
 +++ b/UE4SS/CMakeLists.txt
-@@ -124,12 +124,16 @@ if(NOT WIN32)
+@@ -124,12 +124,26 @@ if(NOT WIN32)
      target_compile_definitions(UE4SS PUBLIC FORCE_U16)
  endif()
  
@@ -12,6 +12,16 @@ index 22dd1d0..859cd4d 100644
 -    BASE_DIRS include
 -    FILES ${UE4SS_HEADERS}
 -)
++# GSPanel patch (2026-09-13): PalServer-Linux-Shipping 把整套静态 libstdc++ 的异常
++# 运行时符号（__cxa_throw/__cxa_begin_catch/typeinfo…）导出并抢占进程级解析，
++# libsteam_api.so 又额外导出一份坏的 __gxx_personality_v0。本库一旦抛 C++ 异常，
++# throw/catch/unwind 三套运行时互相打架 → 必死进程（SIGABRT/SEGV）。
++# 对策：libstdc++ 静态链进本库并用 --exclude-libs 全部 localize，让本库的 C++
++# 异常运行时完全自洽（personality/__cxa_*/typeinfo 全用自己的副本），与宿主零纠缠。
++if(NOT WIN32)
++    target_link_options(UE4SS PRIVATE "-static-libstdc++" "-Wl,--exclude-libs,ALL")
++endif()
++
 +# Add headers as sources for IDE integration (FILE_SET requires CMake >= 3.23)
 +if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.23")
 +    target_sources(UE4SS PUBLIC
@@ -25,6 +35,39 @@ index 22dd1d0..859cd4d 100644
  
  # Organize in IDE
  source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${UE4SS_SOURCES} ${UE4SS_HEADERS})
+diff --git a/UE4SS/src/Mod/LuaMod.cpp b/UE4SS/src/Mod/LuaMod.cpp
+index 1322e5f..8e0dd08 100644
+--- a/UE4SS/src/Mod/LuaMod.cpp
++++ b/UE4SS/src/Mod/LuaMod.cpp
+@@ -4186,6 +4186,10 @@ Overloads:
+                                    [[maybe_unused]] Unreal::UFunction* Function,
+                                    [[maybe_unused]] void* Parms) -> void
+     {
++        // GSPanel patch: 本回调一定跑在游戏线程上；EngineTick 钩子不可用时，
++        // 这里就是初始化 game thread id 的兜底（否则 IsInGameThread() 永远不可用）
++        Unreal::InitializeGameThreadIdFromCurrentThread();
++
+         {
+             std::lock_guard<std::recursive_mutex> guard{LuaMod::m_thread_actions_mutex};
+             LuaMod::m_is_processing_actions = true;
+@@ -4440,6 +4444,17 @@ Overloads:
+                 lua.throw_error(error_overload_not_found);
+             }
+ 
++            // GSPanel patch: 默认方法不可用时自动回退到另一个钩子
++            // （Windows 上 EngineTick 通常可用；本 Linux 移植早期版本里 EngineTick 扫描会失败，而 ProcessEvent 可用）
++            if (method == GameThreadExecutionMethod::EngineTick && !is_engine_tick_hook_available() && is_process_event_hook_available())
++            {
++                method = GameThreadExecutionMethod::ProcessEvent;
++            }
++            else if (method == GameThreadExecutionMethod::ProcessEvent && !is_process_event_hook_available() && is_engine_tick_hook_available())
++            {
++                method = GameThreadExecutionMethod::EngineTick;
++            }
++
+             const auto mod = get_mod_ref(lua);
+ 
+             // Check hook availability before registering
 diff --git a/UE4SS/src/UE4SSProgram.cpp b/UE4SS/src/UE4SSProgram.cpp
 index 9aa81b7..85e3a42 100644
 --- a/UE4SS/src/UE4SSProgram.cpp
@@ -482,6 +525,29 @@ index a702cf0..7ff114f 100644
          endif()
          
          message(STATUS "Added ${TARGET_NAME} headers to IDE visibility")
+diff --git a/deps/first/LuaMadeSimple/src/LuaMadeSimple.cpp b/deps/first/LuaMadeSimple/src/LuaMadeSimple.cpp
+index 9508eef..7acf358 100644
+--- a/deps/first/LuaMadeSimple/src/LuaMadeSimple.cpp
++++ b/deps/first/LuaMadeSimple/src/LuaMadeSimple.cpp
+@@ -1077,11 +1077,15 @@ namespace RC::LuaMadeSimple
+         auto final_message = handle_error(lua_state, error_message);
+ 
+         lua_state_errors.emplace(lua_state, final_message);
+-        // Do C++ throw if there aren't any Lua handlers, it means this function may have been called outside a protected Lua function.
+-        // This normally happens while setting up a callback into Lua, often via get_function_ref.
++        // GSPanel patch (2026-09-13): 原来这里在没有 Lua error handler 时做 C++ throw。
++        // 在 Palworld(Linux) 下这个异常 unwinding 会命中 libsteam_api.so 里坏掉的
++        // __gxx_personality_v0 → 直接 SIGABRT 杀掉整个游戏进程（玩家进服时崩就是这条路径：
++        // UE4SS 的绑定在 protected Lua 调用之外报错 → throw → abort，连错误信息都看不到）。
++        // 改成：把错误打到 stderr（进 console.log 可见），然后**不抛错**。
++        // 这样脚本里 pcall 不到的地方出问题也只是拿到 nil，不会再杀进程。
+         if (!lua_state->errorJmp && !lua_state->l_G->mainthread->errorJmp)
+         {
+-            throw std::runtime_error{final_message};
++            fprintf(stderr, "[LuaMadeSimple] Lua binding error (no error handler; NOT throwing to avoid SIGABRT): %s\n", final_message.c_str());
+         }
+         else
+         {
 diff --git a/deps/first/Unreal/CMakeLists.txt b/deps/first/Unreal/CMakeLists.txt
 index 14df4ba..2865ab6 100644
 --- a/deps/first/Unreal/CMakeLists.txt
@@ -527,6 +593,20 @@ index e127142..b823eb3 100644
              ComparisonIndex = Name.ComparisonIndex;
  #ifdef WITH_CASE_PRESERVING_NAME
              DisplayIndex = Name.DisplayIndex;
+diff --git a/deps/first/Unreal/include/Unreal/UnrealInitializer.hpp b/deps/first/Unreal/include/Unreal/UnrealInitializer.hpp
+index fe3f4ba..a3e0f82 100644
+--- a/deps/first/Unreal/include/Unreal/UnrealInitializer.hpp
++++ b/deps/first/Unreal/include/Unreal/UnrealInitializer.hpp
+@@ -148,6 +148,9 @@ namespace RC::Unreal::UnrealInitializer
+ namespace RC::Unreal
+ {
+     auto RC_UE_API GetGameThreadId() -> std::thread::id;
++
++    // GSPanel patch: 供“已知跑在游戏线程”的回调（如 ProcessEvent 钩子）初始化 game thread id
++    auto RC_UE_API InitializeGameThreadIdFromCurrentThread() noexcept -> void;
+     auto RC_UE_API IsInGameThread() -> bool;
+     auto RC_UE_API IsGameThreadInitialized() noexcept -> bool;
+ 
 diff --git a/deps/first/Unreal/include/Unreal/VersionedContainer/UnrealVirtualImpl/UnrealVirtualBaseVC.hpp b/deps/first/Unreal/include/Unreal/VersionedContainer/UnrealVirtualImpl/UnrealVirtualBaseVC.hpp
 index 68af5a3..6bcae9c 100644
 --- a/deps/first/Unreal/include/Unreal/VersionedContainer/UnrealVirtualImpl/UnrealVirtualBaseVC.hpp
@@ -635,3 +715,123 @@ index 3ee3ad2..bc00c7b 100644
          }
      }
  
+diff --git a/deps/first/Unreal/src/UnrealInitializer.cpp b/deps/first/Unreal/src/UnrealInitializer.cpp
+index 8dd573f..1e93864 100644
+--- a/deps/first/Unreal/src/UnrealInitializer.cpp
++++ b/deps/first/Unreal/src/UnrealInitializer.cpp
+@@ -1050,6 +1050,82 @@ namespace RC::Unreal::UnrealInitializer
+         }
+ 
+ #ifdef __linux__
++        // ===== GSPanel patch (Palworld/Linux, 2026-09-13) =====
++        // 上面这段 Linux 早退把“整个 post-scan 初始化”都跳过了，结果连 **不依赖全量遍历** 的两件事也没做：
++        //   1) UObject::ProcessEvent 的地址只来自 stripped 二进制上的 AOB/dlsym 扫描（可能是错的）
++        //      → ProcessEvent detour “安装成功”但永不触发 → ExecuteInGameThread/自定义事件/NotifyOnNewObject 全部失效；
++        //   2) 没有解析 UEngine::Tick，也没注册 HookedEngineTick → game thread id 永远未初始化
++        //      → Lua 的 IsInGameThread()/GetGameThreadId() 抛 C++ 异常（libsteam_api 的 __gxx_personality_v0
++        //        会把它变成 SIGSEGV）→ 游戏进程直接崩。
++        // 这里只做“按路径找 CDO + 读 vtable”的安全解析（不做任何 UObject 全量遍历）。
++        {
++            auto find_cdo = [](const TCHAR* Path) -> UObject* {
++                return UObjectGlobals::StaticFindObject_InternalSlow(nullptr, nullptr, Path);
++            };
++
++            // 1) ProcessEvent：从 UObject CDO 的 vtable 槽解析（这是 UE4SS 正常运行时的做法）
++            if (auto* ObjectCDO = find_cdo(STR("/Script/CoreUObject.Default__Object")))
++            {
++                if (auto addr = OPTIONAL_GET_ADDRESS_OF_UNREAL_VIRTUAL(UObject, ProcessEvent, ObjectCDO))
++                {
++                    UObject::ProcessEventInternal.assign_address(addr);
++                    fprintf(stderr, "[UE4SS] Linux: UObject::ProcessEvent = %p (from CDO vtable)\n", addr);
++                }
++            }
++            else
++            {
++                fprintf(stderr, "[UE4SS] Linux: WARNING: could not find /Script/CoreUObject.Default__Object\n");
++            }
++
++            // 2) EngineTick：Palworld 用自己的 UPalGameEngine（继承 UGameEngine），必须从它的 CDO 读 vtable，
++            //    槽位偏移用 UEngine::VTableLayoutMap（VTableLayout.ini）——与 UEngine 的 vtable 前缀一致。
++            UObject* EngineCDO = nullptr;
++            {
++                const TCHAR* EnginePaths[] = {
++                    STR("/Script/Pal.Default__PalGameEngine"),
++                    STR("/Script/PalEngine.Default__PalGameEngine"),
++                    STR("/Script/Engine.Default__GameEngine"),
++                };
++                int32_t EnginePathIndex = -1;
++                for (int32_t i = 0; i < 3; ++i)
++                {
++                    EngineCDO = find_cdo(EnginePaths[i]);
++                    if (EngineCDO)
++                    {
++                        EnginePathIndex = i;
++                        break;
++                    }
++                }
++                fprintf(stderr, "[UE4SS] Linux: engine CDO resolved via path #%d (0=Pal.Default__PalGameEngine, 1=PalEngine..., 2=Engine.Default__GameEngine)\n", EnginePathIndex);
++            }
++            if (EngineCDO)
++            {
++                // GSPanel patch: 先用 VTableLayout.ini 的 "Tick" 偏移，Palworld 这个 build 里它指向
++                // 一个无关小函数（实测钩子永不触发）。用离线分析二进制 vtable（_ZTV11UGameEngine /
++                // _ZTV14UPalGameEngine，游戏自带 dynsym 符号）反汇编确认：真 Tick 在 slot 0x300，
++                // 签名 (this, float in xmm0, bool in esi)。这里直接用 0x300（仅当引擎 CDO 存在时）。
++                auto vtable_ptr = *reinterpret_cast<std::byte**>(EngineCDO);
++                auto tick_candidate = *reinterpret_cast<void**>(vtable_ptr + 0x300);
++                if (tick_candidate)
++                {
++                    UEngine::TickInternal.assign_address(tick_candidate);
++                    Hook::RegisterEngineTickPreCallback(HookedEngineTick, {true, false, STR("UE4SS"), STR("GameThreadInitializer")});
++                    fprintf(stderr, "[UE4SS] Linux: UEngine::Tick = %p (slot 0x300, hooked)\n", tick_candidate);
++                }
++                else if (auto addr = OPTIONAL_GET_ADDRESS_OF_UNREAL_VIRTUAL(UEngine, Tick, EngineCDO))
++                {
++                    UEngine::TickInternal.assign_address(addr);
++                    Hook::RegisterEngineTickPreCallback(HookedEngineTick, {true, false, STR("UE4SS"), STR("GameThreadInitializer")});
++                    fprintf(stderr, "[UE4SS] Linux: UEngine::Tick = %p (from engine CDO vtable, hooked)\n", addr);
++                }
++            }
++            if (!EngineCDO)
++            {
++                fprintf(stderr, "[UE4SS] Linux: WARNING: no engine CDO found (EngineTick hook unavailable)\n");
++            }
++        }
++        // ===== end GSPanel patch =====
++
+         // On Linux with stripped binaries, iterating GUObjectArray crashes because:
+         // 1. Objects may not be fully initialized yet (GetNamePrivate() crashes)
+         // 2. FName comparisons with wide strings can crash on stripped binaries
+@@ -1429,16 +1505,26 @@ namespace RC::Unreal
+ {
+     auto GetGameThreadId() -> std::thread::id
+     {
+-        if (!UnrealInitializer::GGameThreadIdInitialized)
+-        {
+-            throw std::runtime_error{"GetGameThreadId called too early, not yet initialized by UGameEngine::Tick"};
+-        }
+-        return UnrealInitializer::GGameThreadId;
++        // GSPanel patch: 原来这里在 game thread id 未初始化时抛 std::runtime_error，
++        // 而本 Linux 移植里 id 只在 EngineTick 回调里初始化；一旦勾子不可用，
++        // 任何调用（含 Lua 的 IsInGameThread()）都会抛异常 → unwinding 命中 libsteam_api.so 里
++        // 坏掉的 __gxx_personality_v0 → SIGSEGV。改成返回空 id，不再抛异常。
++        return GetGameThreadIdRaw();
+     }
+ 
+     auto IsInGameThread() -> bool
+     {
+-        return std::this_thread::get_id() == GetGameThreadId();
++        return IsInGameThreadRaw();
++    }
++
++    auto InitializeGameThreadIdFromCurrentThread() noexcept -> void
++    {
++        // GSPanel patch: 只在第一次调用时记录（该函数假定调用者就是游戏线程）
++        if (UnrealInitializer::GGameThreadId == std::thread::id{})
++        {
++            UnrealInitializer::GGameThreadId = std::this_thread::get_id();
++            UnrealInitializer::GGameThreadIdInitialized = UnrealInitializer::GGameThreadId != std::thread::id{};
++        }
+     }
+ 
+     auto IsGameThreadInitialized() noexcept-> bool

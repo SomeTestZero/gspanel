@@ -30,7 +30,7 @@ const (
 
 // modVersion 面板内置 mod 脚本的版本号，必须与 assets/palworld-ue4ss/mod/scripts/main.lua
 // 里的 MOD_VERSION 一致；不一致会导致「扩展命令 mod 有更新」提示。
-const modVersion = "2026-09-13.3"
+const modVersion = "2026-09-13.11"
 
 func embeddedModVersion() string { return modVersion }
 
@@ -114,6 +114,7 @@ type UE4SSStatus struct {
 	Supported    bool            `json:"supported"`     // 模板是否支持（palworld）
 	Enabled      bool            `json:"enabled"`       // 面板配置里希望启用
 	Installed    bool            `json:"installed"`     // 实例里有 libUE4SS.so
+	Shim         bool            `json:"shim"`          // 实例里有 libgxxfix.so（EH personality 垫片）
 	Mod          bool            `json:"mod"`           // Mods/gspanel/scripts/main.lua
 	Queue        bool            `json:"queue"`         // gspanel-mod 命令队列目录
 	StartPatched bool            `json:"start_patched"` // start.sh 已注入 LD_PRELOAD
@@ -133,6 +134,9 @@ func ue4ssStatus(inst *Instance) UE4SSStatus {
 	}
 	if _, err := os.Stat(filepath.Join(bin, "libUE4SS.so")); err == nil {
 		st.Installed = true
+	}
+	if _, err := os.Stat(filepath.Join(bin, "libgxxfix.so")); err == nil {
+		st.Shim = true
 	}
 	modPath := filepath.Join(bin, "Mods", "gspanel", "scripts", "main.lua")
 	if _, err := os.Stat(modPath); err == nil {
@@ -223,21 +227,27 @@ func (sv *Server) installUE4SS(inst *Instance, tmpl *GameTemplate) error {
 	if err := copyFileAs(ue4ssAssetPath(), filepath.Join(bin, "libUE4SS.so"), 0755); err != nil {
 		return fmt.Errorf("复制 libUE4SS.so: %w", err)
 	}
-	for _, f := range []struct{ name, dst string }{
-		{"layouts/MemberVariableLayout.ini", filepath.Join(bin, "MemberVariableLayout.ini")},
-		{"layouts/VTableLayout.ini", filepath.Join(bin, "VTableLayout.ini")},
-		{"UE4SS-settings.ini", filepath.Join(bin, "UE4SS-settings.ini")},
-		{"mods.txt", filepath.Join(bin, "Mods", "mods.txt")},
-		{"mod/scripts/main.lua", filepath.Join(bin, "Mods", "gspanel", "scripts", "main.lua")},
+	for _, f := range []struct {
+		name, dst string
+		mode      os.FileMode
+	}{
+		// EH 垫片：必须随 libUE4SS.so 一起 LD_PRELOAD（且排最前），否则绑定层
+		// C++ 异常一出现就 abort 游戏进程（见 tools/palworld-ue4ss/shim-eh/）
+		{"libgxxfix.so", filepath.Join(bin, "libgxxfix.so"), 0755},
+		{"layouts/MemberVariableLayout.ini", filepath.Join(bin, "MemberVariableLayout.ini"), 0644},
+		{"layouts/VTableLayout.ini", filepath.Join(bin, "VTableLayout.ini"), 0644},
+		{"UE4SS-settings.ini", filepath.Join(bin, "UE4SS-settings.ini"), 0644},
+		{"mods.txt", filepath.Join(bin, "Mods", "mods.txt"), 0644},
+		{"mod/scripts/main.lua", filepath.Join(bin, "Mods", "gspanel", "scripts", "main.lua"), 0644},
 		// UE4SS 的工作目录兼容：实例根也放一份布局表
-		{"layouts/MemberVariableLayout.ini", filepath.Join(inst.Dir, "MemberVariableLayout.ini")},
-		{"layouts/VTableLayout.ini", filepath.Join(inst.Dir, "VTableLayout.ini")},
+		{"layouts/MemberVariableLayout.ini", filepath.Join(inst.Dir, "MemberVariableLayout.ini"), 0644},
+		{"layouts/VTableLayout.ini", filepath.Join(inst.Dir, "VTableLayout.ini"), 0644},
 	} {
 		data, err := palworldAsset(f.name)
 		if err != nil {
 			return fmt.Errorf("读取内置资产 %s: %w", f.name, err)
 		}
-		if err := writeAssetFile(f.dst, data, 0644); err != nil {
+		if err := writeAssetFile(f.dst, data, f.mode); err != nil {
 			return fmt.Errorf("写入 %s: %w", f.dst, err)
 		}
 	}
@@ -262,6 +272,7 @@ func (sv *Server) uninstallUE4SS(inst *Instance, tmpl *GameTemplate) error {
 	}
 	for _, p := range []string{
 		filepath.Join(bin, "libUE4SS.so"),
+		filepath.Join(bin, "libgxxfix.so"),
 		filepath.Join(bin, "MemberVariableLayout.ini"),
 		filepath.Join(bin, "VTableLayout.ini"),
 		filepath.Join(bin, "UE4SS-settings.ini"),

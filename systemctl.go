@@ -155,10 +155,15 @@ func writeStartScript(inst *Instance, tmpl *GameTemplate) error {
 	if inst.UE4SS && tmpl.ID == "palworld" {
 		// UE4SS：LD_PRELOAD 只能作用于游戏二进制。PalServer.sh 是 shell 包装，
 		// 若把 LD_PRELOAD 带进 /bin/sh，UE4SS 构造器会在非 UE 进程里段错误。
+		// libgxxfix.so 是 __gxx_personality_v0 拦截垫片（libsteam_api.so 导出的坏
+		// personality 会让任何 C++ 异常 unwind 直接 abort 游戏进程），必须排最前；
+		// 垫片缺失时回退到只 preload libUE4SS.so（见 tools/palworld-ue4ss/shim-eh/）。
 		b.WriteString("# Palworld 扩展命令（UE4SS）：直接 exec 底层二进制（见 tools/palworld-ue4ss/README.md）\n")
 		b.WriteString("if [ ! -f Pal/Binaries/Linux/steamclient.so ]; then cp linux64/steamclient.so Pal/Binaries/Linux/steamclient.so 2>/dev/null || true; fi\n")
 		b.WriteString("chmod +x Pal/Binaries/Linux/PalServer-Linux-Shipping 2>/dev/null || true\n")
-		b.WriteString("exec env LD_PRELOAD=\"$PWD/Pal/Binaries/Linux/libUE4SS.so\" Pal/Binaries/Linux/PalServer-Linux-Shipping Pal")
+		b.WriteString("PRE=\"$PWD/Pal/Binaries/Linux/libUE4SS.so\"\n")
+		b.WriteString("[ -f \"$PWD/Pal/Binaries/Linux/libgxxfix.so\" ] && PRE=\"$PWD/Pal/Binaries/Linux/libgxxfix.so:$PRE\"\n")
+		b.WriteString("exec env LD_PRELOAD=\"$PRE\" Pal/Binaries/Linux/PalServer-Linux-Shipping Pal")
 		for _, a := range inst.Args {
 			fmt.Fprintf(&b, " %s", shellQuote(a))
 		}

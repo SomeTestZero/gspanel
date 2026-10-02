@@ -68,8 +68,8 @@ go vet ./...                                         # 无测试框架；临时�
 | scheduler.go | 计划任务（每日/间隔：重启、备份、更新）；`updateInstance`（手动/定时/自动更新共用入口）先比对 Steam buildid 预检，已最新则直接返回不停服（预检失败照旧更新）；`gracefulStop`：RCON 广播→存档→停；tick 里挂版本轮询入口与看门狗 `watchInstances` |
 | updatecheck.go | 版本轮询自动更新：实例开 `auto_update`（设置页开关，存 config.json）后，每 30 分钟用 api.steamcmd.net 查 public 分支 buildid 对比本地 `steamapps/appmanifest_<appid>.acf`，落后且实例无任务在跑（`HasRunningFor`）时更新。玩家门槛 `autoUpdateReady`：服务没开或模板无 `format=players` REST 命令→直接更；有玩家→广播通知（REST Broadcast 优先，每小时最多一次）并等待；无玩家持续 10 分钟（内存态 `autoStates`，面板重启重计）→才起 `auto-update` 任务走 `updateInstance` 流程（停→更→回写配置→拉起）。广播通知与首次无玩家两个等待节点会写事件日志 |
 | backup.go / monitor.go / netinfo.go / util.go | 备份打包/恢复（恢复后按面板记录重写 ini 端口/密码/服务器名）/上传（跨服迁移存档：新机建同名模板实例→上传备份包或 deploy 放好 saves/→恢复）；`backupAndSync`（手动/定时备份共用入口）备份成功后按 `sync_targets` 列表逐目标 rsync 异地同步（`syncBackup`，远端只留最新一份）；/proc 资源监控；公网 IP 探测；chown 等杂项 |
-| tools/palworld-ue4ss/ | Palworld 给物品的框架侧物料：ue4ss-linux 源码补丁（8 个修复）、build/install/uninstall/硬链接副本测试脚本；`extract-items-zh.py` 从 pak 离线提取物品中文名基线；运行时资产（mod/布局表/设置）在 `assets/palworld-ue4ss/`（embed 进面板二进制） |
-| mods.go | Palworld 扩展命令（UE4SS）面板侧管理：二进制上传/导入/下载（`data/ue4ss/`）、实例安装/卸载/状态（`assets/palworld-ue4ss/` 下发 + start.sh 注入 + `Instance.UE4SS`）、mod 版本比对（mod_stale） |
+| tools/palworld-ue4ss/ | Palworld 给物品的框架侧物料：ue4ss-linux 源码补丁（12 项修复，含 EH 运行时修复）、build/install/uninstall/硬链接副本测试脚本、`shim-eh/`（__gxx_personality_v0 拦截垫片，产物 libgxxfix.so 提交进 assets）；`extract-items-zh.py` 从 pak 离线提取物品中文名基线；运行时资产（垫片/mod/布局表/设置）在 `assets/palworld-ue4ss/`（embed 进面板二进制） |
+| mods.go | Palworld 扩展命令（UE4SS）面板侧管理：二进制上传/导入/下载（`data/ue4ss/`）、实例安装/卸载/状态（`assets/palworld-ue4ss/` 下发，含 libgxxfix.so 垫片 + start.sh 注入 + `Instance.UE4SS`）、mod 版本比对（mod_stale） |
 | palworlditems.go | 物品库（「给物品」用）：内置基线 `assets/palworld-items/palworld-zh.json`（2466 项 ID+中文名，pak 离线提取）+ 运行时缓存 `data/items/palworld.json`；API `GET /instances/{name}/items`（搜索/分类）、`POST .../items/refresh`（mod 导 ID + 按 ID 合并中文名）、`GET .../players`（whojson 在线玩家） |
 
 ## 模板系统（改动重灾区，坑都在这）
@@ -112,8 +112,8 @@ ark-se / terraria / corekeeper / dst（饥荒联机版，343050，2026-07 新增
   面板：**面板原生管理**——「设置/环境 → Palworld 扩展命令」上传/按路径导入/URL 下载 libUE4SS.so
   （存 `data/ue4ss/libUE4SS.so`，不入 git），实例「设置 → 扩展命令」一键安装/卸载/更新
   （`mods.go` + `Instance.UE4SS` 标志）；
-  `writeStartScript` 在 `UE4SS=true` 时生成 `exec env LD_PRELOAD=... 游戏二进制`（LD_PRELOAD 绝不能进 shell），
-  所以面板重写 start.sh 不再丢注入。
+  `writeStartScript` 在 `UE4SS=true` 时生成 `exec env LD_PRELOAD=libgxxfix.so:libUE4SS.so 游戏二进制`
+  （LD_PRELOAD 绝不能进 shell；垫片排最前），所以面板重写 start.sh 不再丢注入。
   控制台页有「扩展: 在线玩家/给物品/给经验」按钮（`api.go` `mod-command` + 文件队列
   `<实例>/Pal/Binaries/Linux/gspanel-mod/cmd.txt|res.txt`，因为 ProcessConsoleExec hook 在本游戏装不上）。
   **「给物品」是物品选择对话框**（static/app.js `openGiveItemDialog`）：在线玩家下拉（mod `whojson`）+
@@ -121,20 +121,31 @@ ark-se / terraria / corekeeper / dst（饥荒联机版，343050，2026-07 新增
   「从游戏刷新物品库」。物品库：内置基线 `assets/palworld-items/palworld-zh.json`
   （`tools/palworld-ue4ss/extract-items-zh.py` 从 pak 的 L10N/zh-Hans/DT_ItemNameText_Common 离线提取，
   回退链 zh-Hans→zh-Hant→en→base→ID），运行时从 mod 拿 ID 后按 ID 合并名字存 `data/items/palworld.json`。
-  内置资产（mod/布局表/设置）在 `assets/palworld-ue4ss/`（embed 进二进制，安装时下发）；
+  内置资产（EH 垫片/mod/布局表/设置）在 `assets/palworld-ue4ss/`（embed 进二进制，安装时下发）；
   框架补丁/构建脚本/硬链接副本测试在 `tools/palworld-ue4ss/`（游戏更新后重新编译 .so 并在面板重新「安装」即可）；
-  **mod 的 Lua 语法/加载期错误会抛 C++ 异常直接 abort 游戏进程**（libsteam_api 的
-  `__gxx_personality_v0` 冲突），改完 mod 必须先 `luac5.4 -p` 校验（已踩坑：Lua 5.4 无全局 unpack、
-  嵌套函数不能用 `...`）。
-  已实测：UE4SS 完整初始化（FindAllOf/StaticFindObject/ForEachUObject 154k 对象）、mod 加载、文件队列
-  who/whojson/hello/items（2466 个物品 ID）；**对在线玩家的实际给物品尚未实测**（一直无人上线），
-  玩家上线后可用面板「给物品…」验证。
-  **UE4SS 读 FText 会 abort（本 build 的坑，已绕开）**：`FText:ToString()` →
+  **mod 的 Lua 语法/加载期错误**经 LuaMadeSimple 补丁打 stderr 不杀进程，但仍必须先
+  `luac5.4 -p` 校验（已踩坑：Lua 5.4 无全局 unpack、嵌套函数不能用 `...`）。
+  已实测：UE4SS 完整初始化、mod 加载、文件队列 who/whojson/hello/items（2466 个物品 ID）、
+  `probe throw`/`probe throwasync`（故意触发绑定层 C++ throw）只报错不崩；
+  **对在线玩家的实际给物品尚未实测**（一直无人上线），玩家上线后可用面板「给物品…」验证。
+- **玩家进服一会儿就 SIGABRT 的根因（已修复，2026-09-13）**：不是 Lua 代码本身，而是
+  **进程级 C++ 异常运行时被劫持**：① libsteam_api.so 静态链旧 libstdc++ 并导出无版本的
+  `__gxx_personality_v0`，抢先被动态链接器选中，与系统 libgcc_s unwinder 不兼容，安装
+  landing pad 时直接 abort —— UE4SS 的 TRY/catch 全部失效，任何 C++ 异常（如绑定层
+  overload throw）都杀进程；② PalServer 主程序又导出整套静态 libstdc++ 符号
+  （`__cxa_throw`/`typeinfo`…），throw/catch 被劫持到游戏那份运行时，修了 personality 后
+  会在 unwind 途中 SEGV。修复（双层）：a) `tools/palworld-ue4ss/shim-eh/` 产出
+  `libgxxfix.so`（LD_PRELOAD 最前，personality 转发回系统 libstdc++ 真身，启动时
+  console.log 可见 `[gxxfix] ... interposed`）；b) libUE4SS 用 `-static-libstdc++
+  -Wl,--exclude-libs,ALL` 重链，C++ 异常运行时完全自洽。两者都在补丁包与面板资产里，
+  重装/更新不会丢。**验证垫片在役**：控制台 `probe throw` 应返回
+  `survived binding throw: pcall ok=false err=No overload found...` 且服务器不崩。
+- **UE4SS 读 FText 不可取（本 build）**：`FText:ToString()` →
   `UKismetTextLibrary:Conv_TextToString` 的 native macro 里 path 式 `StaticFindObject`
-  找不到 UFunction → throw → unwind 到 libsteam_api 的 `__gxx_personality_v0` 直接 SIGABRT；
+  找不到 UFunction 会抛错（EH 修复后只是 Lua 错误，不再致命，但依然取不到文本）；
   `FText::StaticSize_Private` 也从未初始化（二进制里是 -1）。所以 mod 里
   **不要访问 FText，也不要访问不确定存在的属性**（1.0.4 的 `DT_ItemDataTable` 行结构体
-  `PalStaticItemDataStruct` 没有 Name/TypeA/TypeB/Rarity/MaxStackCount，访问即 abort），
+  `PalStaticItemDataStruct` 没有 Name/TypeA/TypeB/Rarity/MaxStackCount），
   物品中文名只能离线提取；`UDataTable:ForEachRow`/`UStruct:ForEachFunction` 的 Lua 回调
   在本 build 也有栈 bug，安全用法只有 `GetRowNames()` + `FindRow()`（且只读确定存在的字段）。
 - `data/config.json` 曾被提交进 git（含面板密码哈希/实例 RCON 密码）：已用 filter-repo 重写

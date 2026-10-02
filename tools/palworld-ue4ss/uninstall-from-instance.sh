@@ -7,7 +7,8 @@ BIN="$INST/Pal/Binaries/Linux"
 if [ -f "$INST/start.sh.pre-ue4ss" ]; then
   cp -a "$INST/start.sh.pre-ue4ss" "$INST/start.sh"
   chown games:games "$INST/start.sh"
-  echo "已恢复 $INST/start.sh（重启实例生效）"
+  rm -f "$BIN/libgxxfix.so"
+  echo "已恢复 $INST/start.sh 并移除 EH 垫片（重启实例生效）"
 else
   echo "没有找到 $INST/start.sh.pre-ue4ss，请手动恢复 start.sh"
 fi

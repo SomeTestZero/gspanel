@@ -22,12 +22,20 @@ BIN="$INST/Pal/Binaries/Linux"
 echo "== 1/4 备份 start.sh（只备份一次）"
 [ -f "$INST/start.sh.pre-ue4ss" ] || cp -a "$INST/start.sh" "$INST/start.sh.pre-ue4ss"
 
-echo "== 2/4 安装 libUE4SS.so / 布局表 / 设置 / mod"
+echo "== 2/4 安装 libUE4SS.so / EH 垫片 / 布局表 / 设置 / mod"
 # Lua 语法必须先验：UE4SS 的语法错误会抛 C++ 异常直接 abort 整个游戏进程
 if command -v luac5.4 >/dev/null; then
   luac5.4 -p "$ASSETS/mod/scripts/main.lua" || { echo "mod 有 Lua 语法错误，已中止"; exit 1; }
 fi
 cp "$SO" "$BIN/libUE4SS.so"
+# __gxx_personality_v0 拦截垫片：libsteam_api.so 导出坏的 personality 抢占进程级
+# 符号解析，任何 C++ 异常 unwind 都会 abort 游戏进程；垫片把它转发回系统 libstdc++。
+# 须排在 LD_PRELOAD 第一位（先于 libUE4SS.so）。见 tools/palworld-ue4ss/shim-eh/
+if [ -f "$ASSETS/libgxxfix.so" ]; then
+  cp "$ASSETS/libgxxfix.so" "$BIN/libgxxfix.so"
+else
+  echo "警告: 缺少 $ASSETS/libgxxfix.so（可用 tools/palworld-ue4ss/shim-eh/build.sh 构建）"
+fi
 cp "$ASSETS/layouts/MemberVariableLayout.ini" "$BIN/MemberVariableLayout.ini"
 cp "$ASSETS/layouts/VTableLayout.ini" "$BIN/VTableLayout.ini"
 cp "$ASSETS/UE4SS-settings.ini" "$BIN/UE4SS-settings.ini"
@@ -46,7 +54,12 @@ cat > "$INST/start.sh" <<'EOF'
 cd "$(dirname "$0")"
 if [ ! -f Pal/Binaries/Linux/steamclient.so ]; then cp linux64/steamclient.so Pal/Binaries/Linux/steamclient.so 2>/dev/null || true; fi
 chmod +x Pal/Binaries/Linux/PalServer-Linux-Shipping 2>/dev/null || true
-exec env LD_PRELOAD="$PWD/Pal/Binaries/Linux/libUE4SS.so" Pal/Binaries/Linux/PalServer-Linux-Shipping Pal -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS
+if [ -f Pal/Binaries/Linux/steamclient.so ]; then :; else cp linux64/steamclient.so Pal/Binaries/Linux/steamclient.so 2>/dev/null || true; fi
+chmod +x Pal/Binaries/Linux/PalServer-Linux-Shipping 2>/dev/null || true
+PRE="$PWD/Pal/Binaries/Linux/libUE4SS.so"
+# EH 垫片必须排在最前（详见 tools/palworld-ue4ss/shim-eh/gxxfix.c）
+[ -f "$PWD/Pal/Binaries/Linux/libgxxfix.so" ] && PRE="$PWD/Pal/Binaries/Linux/libgxxfix.so:$PRE"
+exec env LD_PRELOAD="$PRE" Pal/Binaries/Linux/PalServer-Linux-Shipping Pal -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS
 EOF
 chmod 755 "$INST/start.sh"
 

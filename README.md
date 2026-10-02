@@ -217,9 +217,16 @@ curl -s -X POST localhost:8800/api/instances/palworld-1/command -H "$H" \
    工具 `tools/palworld-ue4ss/extract-items-zh.py`），刷新时用 mod 导出的 ID 与基线按 ID 合并。
    框架补丁与构建脚本在 `tools/palworld-ue4ss/`，运行时资产在 `assets/palworld-ue4ss/`（embed 进面板）；
    游戏更新后重新编译 `libUE4SS.so` 并在面板重新「安装」即可。
-9. **UE4SS 读 FText 会 abort 游戏**（本 build）：`FText::ToString` 走的
+9. **Palworld+UE4SS 的 C++ 异常会杀进程（已修复）**：libsteam_api.so 导出坏的
+   `__gxx_personality_v0` 抢占进程级符号解析、PalServer 主程序又导出整套静态 libstdc++
+   异常运行时符号，导致 UE4SS 绑定层任何 C++ throw 在 unwind 时 abort/SEGV（曾表现为
+   「玩家进服一会儿服务器就崩」）。修复是双层的：LD_PRELOAD 最前的 `libgxxfix.so` 垫片
+   （personality 转发回系统 libstdc++）+ libUE4SS 用 `-static-libstdc++ --exclude-libs,ALL`
+   重链（异常运行时内化）。均在 `tools/palworld-ue4ss/`（shim-eh/ 与补丁包），面板安装时自动下发。
+   验证：控制台发 `probe throw` 应返回 Lua 错误信息且服务器不崩。
+10. **UE4SS 读 FText 不可取**（本 build）：`FText::ToString` 走的
    `UKismetTextLibrary:Conv_TextToString` native macro 里 `StaticFindObject` 找不到 UFunction
-   （path 式函数查找失效）→ throw → 在 libsteam_api 的 `__gxx_personality_v0` 上 unwind 失败直接 SIGABRT。
+   （path 式函数查找失效）会抛错（EH 修复后只是 Lua 错误，不再致命）。
    因此 mod **不要访问 FText/不确定存在的属性**（`DT_ItemDataTable` 行结构体也没有 Name/TypeA 等字段），
    物品中文名改为面板侧离线提取；`FText::StaticSize_Private` 也未初始化（值为 -1），修复后才可能用 FText。
 

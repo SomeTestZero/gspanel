@@ -1,16 +1,21 @@
 # Palworld 给物品（原生 Linux，UE4SS + 自定义修复）
 
-> 状态（2026-09-13）：**已打通并在 `palworld-1` 生产实例上启用**。
+> 状态（2026-09-13 晚）：**已打通并在 `palworld-1` 生产实例上启用；玩家进服崩溃
+> 已定位并修复**（见第 2 节 #10/#11/#12 与 shim-eh/）。
 > UE4SS 在 Palworld 1.0.4 (buildid 25080279) 原生 Linux 服务端上完整初始化，
 > Lua mod 可访问 UE 对象；面板控制台页「扩展: 在线玩家 / 给物品 / 给经验」按钮，
 > 其中「给物品」是**物品选择对话框**（在线玩家下拉 + 全量中文名搜索 + 数量快捷档）。
 >
 > 已实测：`FindAllOf` / `FindObject` / `GetFullName` / `ForEachUObject`
 > （154k 对象）/ `StaticFindObject` / `UDataTable:GetRowNames`+`FindRow`
-> （导出 2466 个物品 ID）/ 文件队列 `who`/`whojson`/`hello`/`items` 正常。
-> **未实测**：对在线玩家真正执行 `AddItem_ServerInternal`（等玩家上线后验证）。
+> （导出 2466 个物品 ID）/ 文件队列 `who`/`whojson`/`hello`/`items` 正常；
+> **绑定层 C++ 异常回归测试**（mod `probe throw` / `probe throwasync` 故意触发
+> 裸 `throw std::runtime_error`）：修复前必然 SIGABRT 杀进程，修复后正确退化为
+> 普通 Lua 错误（pcall 捕获 + 完整 traceback 写 res.txt），游戏线程与 async 线程
+> 两条路径都验证通过。
+> **未实测**：对在线玩家真正执行给物品（等玩家上线后验证；现在失败只会报错不会崩）。
 >
-> ⚠️ 本 build 的 UE4SS **FText 读取会 abort 游戏进程**（详见第 5 节），物品中文名
+> ⚠️ 本 build 的 UE4SS **FText 读取仍不可用**（详见第 5 节），物品中文名
 > 改为面板侧从 pak 离线提取（`extract-items-zh.py`）。
 
 ## 1. 调研结论
@@ -35,6 +40,9 @@
 | 7 | `GUObjectArray` 启发式解析到栈地址（把 int32 计数器数组当成对象数组），且 `max_elements` 上限 1000 万把真实值 3361 万过滤掉 | 强化校验：候选必须在主程序可写段（.bss），遍历 chunk 0 前 8 项校验 vtable 在主程序只读段、`InternalIndex == 下标`；上限抬到 1<<30、MaxChunks 65536；跳过只会命中假地址的堆/栈扫描 |
 | 8 | `ForEachUObject_Chunked` 对每个 chunk 都遍历 65536 项，读到最后 chunk 未初始化区域的垃圾指针 → `FindAllOf` 崩溃 | 改为按全局索引只遍历到 `NumElements`，并加指针范围防御 |
 | 9 | 上游预编译是 Ubuntu 24.04 (glibc 2.38) 构建，22.04 (glibc 2.35) 加载失败 | 本机源码编译，天然兼容；`shim/` 是给预编译版用的垫片（已不需要，保留备用） |
+| 10 | **（崩溃根因①）** libsteam_api.so 静态链了旧 libstdc++ 并导出**无版本**的 `__gxx_personality_v0`，抢先于系统 libstdc++ 被动态链接器选中；它与系统 libgcc_s unwinder 不兼容，安装 landing pad 时直接 abort → **任何 C++ 异常 unwind 即 SIGABRT**（UE4SS 的 TRY/catch 形同虚设）。玩家进服崩溃即此：玩家相关代码路径触发绑定层错误 → 异常 → 死 | 双保险：a) `shim-eh/`（libgxxfix.so）：LD_PRELOAD 排最前，把 `__gxx_personality_v0` 转发回系统 libstdc++ 真身；b) 见 #11 静态链接，让本库人格引用彻底内化 |
+| 11 | **（崩溃根因②）** PalServer 主程序导出整套静态 libstdc++ 符号（`__cxa_throw`/`__cxa_begin_catch`/`typeinfo`…），libUE4SS 的异常创建/捕获被劫持到游戏那份运行时，与系统 unwinder/personality 混用 → unwind 途中 SEGV（修了 personality 后暴露的第二层） | 链接 libUE4SS 时 `-static-libstdc++ -Wl,--exclude-libs,ALL`：本库 C++ 异常运行时完全自洽（personality/__cxa_*/typeinfo 全用自己的副本，且不再导出干扰他人），`UE4SS/CMakeLists.txt` |
+| 12 | LuaMadeSimple 在「无 Lua error handler」路径裸 `throw std::runtime_error`（mod 加载期/注册期错误直接炸进程，连错误文本都看不到）；`ExecuteInGameThread` 默认 EngineTick 方法在早期 build 不可用时不回退 | LuaMadeSimple 改为打 stderr 日志不抛错；LuaMod 增加游戏线程 id 兜底初始化 + EngineTick/ProcessEvent 钩子自动回退（`LuaMadeSimple.cpp` / `LuaMod.cpp`） |
 
 ## 3. 部署 / 使用
 
@@ -65,19 +73,20 @@ sudo tools/palworld-ue4ss/uninstall-from-instance.sh /home/games/instances/palwo
 
 ```
 /home/games/instances/palworld-1/
-├── start.sh                       # 已改成 env LD_PRELOAD=... 直接 exec 游戏二进制
+├── start.sh                       # 已改成 env LD_PRELOAD=libgxxfix.so:libUE4SS.so 直接 exec 游戏二进制
 ├── start.sh.pre-ue4ss             # 原始启动脚本（卸载时恢复）
 ├── MemberVariableLayout.ini / VTableLayout.ini
 └── Pal/Binaries/Linux/
-    ├── libUE4SS.so                # 我们编译的版本（debug 140MB；strip 后 22MB 在 /home/games/ue4ss-build/）
+    ├── libgxxfix.so               # EH 垫片（__gxx_personality_v0 拦截，shim-eh/ 构建）
+    ├── libUE4SS.so                # 我们编译的版本（静态 libstdc++，debug 140MB；strip 后 19MB）
     ├── MemberVariableLayout.ini / VTableLayout.ini / UE4SS-settings.ini
     ├── Mods/mods.txt              # gspanel : 1
     ├── Mods/gspanel/scripts/main.lua
     └── gspanel-mod/cmd.txt|res.txt  # 文件队列（游戏进程 cwd 在这里）
 ```
 
-编译产物备份：`/home/games/ue4ss-build/libUE4SS.so`（strip，22MB）、
-`libUE4SS.so.debug`（140MB，查问题用）。
+编译产物备份：`/home/games/ue4ss-build/libUE4SS.so`（strip）、`libUE4SS.so.debug`
+（140MB，查问题用；`install-to-instance.sh` 的默认 .so 来源就是这里，重编译后记得同步）。
 
 ## 4. 控制通道：文件队列
 
@@ -131,23 +140,28 @@ sudo tools/palworld-ue4ss/uninstall-from-instance.sh /home/games/instances/palwo
 
 - **LD_PRELOAD 绝不能进 shell**：`start.sh` 里必须 `exec env LD_PRELOAD=... 游戏二进制`，
   否则 bash/PalServer.sh 会加载 UE4SS 并段错误（构造函数假定自己在 UE 进程里）。
+- **LD_PRELOAD 顺序**：`libgxxfix.so` 必须在 `libUE4SS.so` 之前（垫片要让
+  personality 绑定抢在 libsteam_api 之前；两者都是 preload，按列出顺序排）。
+  装好后 console.log 应有 `[gxxfix] __gxx_personality_v0 interposed -> libstdc++`。
 - **FText 不能读（本 build）**：`FText:ToString()` 走 `UKismetTextLibrary:Conv_TextToString`
   的 native macro，里面按 path `StaticFindObject("/Script/Engine.KismetTextLibrary:Conv_TextToString")`
-  在本 build 返回 nil → `throw std::runtime_error` → unwind 到 libsteam_api 的
-  `__gxx_personality_v0` 直接 SIGABRT（任何 UE4SS 的 C++ 异常都会杀进程，`pcall` 兜不住）。
-  同一个原因，`FText::StaticSize_Private` 初始值是 -1 且没人设置，复制 FText 也会 throw。
+  在本 build 返回 nil 并抛错。有 EH 修复后这只是 Lua 错误（不再杀进程），但依然取不到文本。
+  同一个原因，`FText::StaticSize_Private` 初始值是 -1 且没人设置，复制 FText 也会报错。
   想恢复 FText 能力需要改 libUE4SS（修 path 式 UFunction 查找 / 给 StaticSize 赋值）后重编译。
 - **不要访问不确定存在的属性**：1.0.4 的物品行结构体是精简表（无 Name/TypeA/...），
-  读过一次就 abort；mod 里只读文档确认存在的字段。
+  访问不存在属性会抛 Lua 错误（EH 修复后非致命）；mod 里只读文档确认存在的字段。
 - **回调式 API 有栈 bug**：`UDataTable:ForEachRow` / `UStruct:ForEachFunction` 会把
-  回调位取错（`lua_pushvalue(1)` 在 push 了额外值之后失效）→ Lua 报错 → abort；
+  回调位取错（`lua_pushvalue(1)` 在 push 了额外值之后失效）→ Lua 报错（EH 修复后非致命）；
   `UStruct:ForEachProperty` 在简单结构体上能用，但仍属高风险，尽量用
   `GetRowNames()` + `FindRow()`。
-- **mod 的 Lua 语法/加载期错误会直接 abort 整个游戏进程**（UE4SS 把 Lua 错误抛成 C++ 异常，
-  而 libsteam_api 覆盖了 `__gxx_personality_v0`，unwind 失败 → SIGABRT，systemd 重启循环）。
-  改完 mod 必须先 `luac5.4 -p main.lua` 校验再部署（`install-to-instance.sh` 已内置校验）。
+- **mod 的 Lua 语法/加载期错误**：EH 修复后不再杀进程（LuaMadeSimple 补丁会打 stderr
+  日志并跳过），但 mod 加载失败 = 功能静默缺失；改完 mod 仍必须先 `luac5.4 -p main.lua`
+  校验再部署（`install-to-instance.sh` 已内置校验）。
   已踩过的坑：Lua 5.4 没有全局 `unpack`（用 `table.unpack`，mod 顶部已兼容）；
   嵌套匿名函数里不能用 `...`（先在 vararg 函数体内 `local args = {...}`）。
+- **验证垫片/修复在役**：面板控制台发 `probe throw`（游戏线程）/ `probe throwasync`
+  （async 线程），应返回 `survived binding throw: pcall ok=false err=No overload found
+  for function 'LoopAsync'...` 且服务器不崩；若服务器直接消失 = 垫片没装上。
 - `start.sh` 在面板「安装/更新」时会被 `writeStartScript` 重写并**丢掉 LD_PRELOAD**，
   更新游戏后需要重新执行 `install-to-instance.sh`（或以后把该功能做进面板）。
 - 游戏进程 cwd = `Pal/Binaries/Linux`，mod 的相对路径都相对它。
@@ -159,6 +173,7 @@ sudo tools/palworld-ue4ss/uninstall-from-instance.sh /home/games/instances/palwo
 
 ```
 assets/palworld-ue4ss/               # 运行时资产（embed 进面板二进制，安装时下发）
+├── libgxxfix.so                     # EH 垫片预编译产物（源码/构建在 tools/.../shim-eh/）
 ├── layouts/{MemberVariableLayout,VTableLayout}.ini
 ├── mod/scripts/main.lua             # 给物品/给经验/在线玩家/物品表导出 + cmd.txt/res.txt 文件队列
 ├── UE4SS-settings.ini / mods.txt
@@ -167,8 +182,9 @@ assets/palworld-items/palworld-zh.json  # 「给物品」内置物品库（2466 
 
 tools/palworld-ue4ss/                # 框架侧物料（不参与面板构建）
 ├── README.md                        # 本文件
-├── patches/ue4ss-linux-palworld-1.0.4.patch   # 全部源码修复（指向 fork）
-├── build-ue4ss.sh                   # 从 fork 源码编译带修复的 libUE4SS.so
+├── patches/ue4ss-linux-palworld-1.0.4.patch   # 全部源码修复（12 项，打在上游 linux-native 分支）
+├── build-ue4ss.sh                   # 从 fork 源码编译带修复的 libUE4SS.so（含静态 libstdc++ 链接）
+├── shim-eh/                         # __gxx_personality_v0 拦截垫片（gxxfix.c + build.sh → libgxxfix.so）
 ├── install-to-instance.sh / uninstall-from-instance.sh
 ├── extract-items-zh.py              # 从 pak 离线提取物品中文名，生成 assets/palworld-items/
 ├── test-ue4ss.sh                    # 硬链接副本安全试跑（新构建验证用）

@@ -1,3 +1,6 @@
 # 状态与产物，一律不入库（saves/ 是唯一的例外：迁移用存档，需跟踪）
 data/
 gspanel
+
+# shim-eh 构建产物（提交 assets/palworld-ue4ss/libgxxfix.so 那份）
+tools/palworld-ue4ss/shim-eh/libgxxfix.so
