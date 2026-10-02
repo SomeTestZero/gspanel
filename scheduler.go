@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -145,21 +144,38 @@ func (sv *Server) gracefulRestart(ctx context.Context, log io.Writer, inst *Inst
 	return nil
 }
 
-// gracefulStop RCON 广播 -> Save -> Shutdown，超时后 systemctl stop
+// gracefulStop 通知存档并优雅关闭，超时后 systemctl stop
 func (sv *Server) gracefulStop(ctx context.Context, log io.Writer, inst *Instance, tmpl *GameTemplate) error {
-	if tmpl.StopMode == "rcon" && tmpl.RCON != nil && inst.AdminPassword != "" {
-		addr := fmt.Sprintf("127.0.0.1:%d", inst.Ports[tmpl.RCON.PortKey])
+	if tmpl.StopMode == "rcon" && tmpl.RCON != nil {
 		warn := tmpl.StopWarnSecs
 		if warn <= 0 {
 			warn = 10
 		}
-		if _, err := RconExec(addr, inst.AdminPassword, fmt.Sprintf("Broadcast Server_will_restart_in_%d_seconds", warn)); err != nil {
-			fmt.Fprintf(log, "RCON 广播失败（继续停止流程）: %v\n", err)
-		} else {
-			fmt.Fprintf(log, "已广播 %d 秒停机通知，存档并关闭...\n", warn)
+		if tmpl.RCON.Type == "telnet" {
+			// 七日杀式 telnet 控制台：广播 -> 等待 -> 存档 -> shutdown（自带存档退出）
+			send := func(cmd string) {
+				if _, err := telnetExecConfig(inst, tmpl, cmd); err != nil {
+					fmt.Fprintf(log, "telnet 命令 %q 失败（继续停止流程）: %v\n", cmd, err)
+				}
+			}
+			send(fmt.Sprintf("say Server maintenance: stopping in %d seconds", warn))
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("任务被取消")
+			case <-time.After(time.Duration(warn) * time.Second):
+			}
+			send("saveworld")
+			send("shutdown")
+		} else if inst.AdminPassword != "" {
+			addr := fmt.Sprintf("127.0.0.1:%d", inst.Ports[tmpl.RCON.PortKey])
+			if _, err := RconExec(addr, inst.AdminPassword, fmt.Sprintf("Broadcast Server_will_restart_in_%d_seconds", warn)); err != nil {
+				fmt.Fprintf(log, "RCON 广播失败（继续停止流程）: %v\n", err)
+			} else {
+				fmt.Fprintf(log, "已广播 %d 秒停机通知，存档并关闭...\n", warn)
+			}
+			_, _ = RconExec(addr, inst.AdminPassword, "Save")
+			_, _ = RconExec(addr, inst.AdminPassword, fmt.Sprintf("Shutdown %d Server_maintenance", warn))
 		}
-		_, _ = RconExec(addr, inst.AdminPassword, "Save")
-		_, _ = RconExec(addr, inst.AdminPassword, fmt.Sprintf("Shutdown %d Server_maintenance", warn))
 		// 等待进程自行退出
 		deadline := time.Now().Add(time.Duration(warn)*time.Second + 30*time.Second)
 		for time.Now().Before(deadline) {
@@ -198,14 +214,24 @@ func (sv *Server) newWorld(ctx context.Context, log io.Writer, inst *Instance, t
 	if _, err := createBackup(ctx, log, inst, tmpl, 10); err != nil {
 		return fmt.Errorf("备份失败，已中止（未删除存档）: %w", err)
 	}
-	for _, p := range tmpl.WorldPaths {
-		if p == "" || strings.Contains(p, "..") {
-			return fmt.Errorf("世界存档路径非法: %q", p)
+	deleted := 0
+	for _, spec := range tmpl.WorldPaths {
+		abs, err := resolveTemplatePath(inst, tmpl, spec)
+		if err != nil {
+			return fmt.Errorf("世界存档路径非法: %w", err)
 		}
-		fmt.Fprintf(log, "删除世界存档 %s ...\n", p)
-		if err := os.RemoveAll(inst.Dir + "/" + p); err != nil {
-			return fmt.Errorf("删除 %s: %w", p, err)
+		if _, err := os.Stat(abs); err != nil {
+			fmt.Fprintf(log, "世界存档不存在（跳过）: %s\n", abs)
+			continue
 		}
+		fmt.Fprintf(log, "删除世界存档 %s ...\n", abs)
+		if err := os.RemoveAll(abs); err != nil {
+			return fmt.Errorf("删除 %s: %w", abs, err)
+		}
+		deleted++
+	}
+	if deleted == 0 {
+		fmt.Fprintln(log, "注意：没有找到任何可删除的世界存档（配置的 GameWorld/GameName 与磁盘存档目录不匹配？），仅重启生成")
 	}
 	if wasRunning {
 		fmt.Fprintln(log, "启动服务器（将生成新世界）...")

@@ -143,6 +143,8 @@ gmod / tf2 / ark-se / terraria / corekeeper / dst。
       "key": "MaxPlayers", "label": "人数上限", "type": "int",
       "default": 32, "min": 1, "max": 32, // 仅在有官方/可靠依据时填，无依据留空不展示
       "note": "32 为游戏硬上限"           // 补充说明（已知问题/注意事项）
+      // 可选能力：presets（预设一键填充）/ decode_command（在服务器执行命令解码当前值）/
+      // sandbox_options（沙盒选项编辑器，七日杀 SandboxCode 专用，值为选项表 ID）
     }]                                    // type: string|password|int|float|bool|select
   }],
   "backup_paths": ["save"],
@@ -171,7 +173,9 @@ curl -s -X POST localhost:8800/api/instances/palworld-1/command -H "$H" \
 主要端点：`POST /api/login`、`GET /api/system`、`GET/POST /api/instances`、
 `POST /api/instances/{n}/install|update|start|stop|restart`、`GET .../console/stream`(SSE)、
 `POST .../command`、`GET/PUT .../config`、`.../backups`、`.../schedules`、
-`GET /api/tasks`、`POST /api/templates/import`、`POST /api/settings/password|public-ip`。
+`GET /api/tasks`、`POST /api/templates/import`、`POST /api/settings/password|public-ip`、
+`GET /api/sandbox/tables/{id}`、`POST /api/sandbox/decode|encode`、`GET .../sandbox/live`（七日杀沙盒选项编辑）、
+`GET .../items`、`GET .../items/refresh`、`GET .../players`、`POST .../give`（给物品对话框：帕鲁走 mod / 七日杀走 telnet，物品 ID 必须来自物品库）。
 
 ## 网络与安全
 
@@ -212,7 +216,9 @@ curl -s -X POST localhost:8800/api/instances/palworld-1/command -H "$H" \
    实例「设置 → 扩展命令」一键安装/卸载/更新（安装后重启生效），控制台页出现
    「扩展: 在线玩家/给物品/给经验」按钮（走文件队列，非 RCON）。
    「给物品」是**物品选择对话框**：在线玩家下拉 + 全量物品搜索（游戏内中文名/内部 ID，2466 项）、
-   数量快捷档、最近使用、可「从游戏刷新物品库」；中文名来自面板内置基线
+   数量快捷档、最近使用、可「从游戏刷新物品库」。玩家按稳定 UID 选取（支持完整名字，不支持 SteamID），
+   数量限 1～10000 整数、提交前确认；只有游戏返回成功且背包增量吻合才报告到账，
+   部分到账/超时请先检查背包，勿直接重复发放。中文名来自面板内置基线
    （`assets/palworld-items/palworld-zh.json`，从游戏 pak 的 `L10N/zh-Hans/.../DT_ItemNameText_Common` 离线提取，
    工具 `tools/palworld-ue4ss/extract-items-zh.py`），刷新时用 mod 导出的 ID 与基线按 ID 合并。
    框架补丁与构建脚本在 `tools/palworld-ue4ss/`，运行时资产在 `assets/palworld-ue4ss/`（embed 进面板）；
@@ -230,7 +236,25 @@ curl -s -X POST localhost:8800/api/instances/palworld-1/command -H "$H" \
    因此 mod **不要访问 FText/不确定存在的属性**（`DT_ItemDataTable` 行结构体也没有 Name/TypeA 等字段），
    物品中文名改为面板侧离线提取；`FText::StaticSize_Private` 也未初始化（值为 -1），修复后才可能用 FText。
 
+11. **UE4SS 初始化成功但玩家名为空/给物品接口不可用（已修复）**：Palworld 1.0.4 Linux
+    的 `ProcessEvent` 槽位应为 0x268（旧 0x260 指向空函数），FProperty 与 UEnum 的字段布局也有差异；
+    UFunction 是可调用 userdata，物品参数须显式 `FName(id)`。读取玩家 UID 还需结构体绑定补丁：
+    原 CastField 依赖未初始化的静态类信息，返回空指针导致 SEGV；新版按运行时类型校验并防空。
+    **框架 .so、mod 和布局需一起更新并重启**，Lua .2 会拒绝缺少修复标记的旧框架。
+    文件队列 `probe selftest` 无副作用校验原生调用链及默认玩家 UID，详见 `tools/palworld-ue4ss/README.md`。
+12. **七日杀 `give` 是把物品掉在玩家面前**，不是直接进背包（自用进包才走 `giveself`）；
+    物品 ID 必须精确匹配（大小写敏感），面板「给物品」对话框从游戏文件解析物品表免手敲。
+    mod 新增物品点对话框里的「重新扫描游戏文件」。`give` 的 telnet 回显没有稳定成功标记，
+    面板按错误措辞判定成败（如 `Playername or entity id not found.`），最终以控制台日志为准。
+
 ## 测试
+
+```bash
+PATH=/usr/local/go/bin:$PATH go test ./...
+PATH=/usr/local/go/bin:$PATH go vet ./...
+lua5.4 tools/palworld-ue4ss/test-mod.lua
+node --check static/app.js
+```
 
 E2E（headless Chromium，真实浏览器回归）：
 
@@ -259,7 +283,10 @@ sudo cp /tmp/cfg.bak /home/ubuntu/gspanel/data/config.json && sudo systemctl res
 ├── push-saves.sh      # 收各实例最新备份到 saves/ 作迁移种子（git 提交留人工）
 ├── saves/             # 迁移存档种子（<实例名>.tar.gz，每实例最新一份，git 跟踪）
 ├── *.go               # 后端：main/config/auth/api/instance/systemctl/steamcmd/events/
-│                      #   rcon/tasks/scheduler/backup/monitor/configfile/templates/netinfo/util/stream
+│                      #   rcon/rest/telnet/tasks/scheduler/backup/monitor/configfile/templates/
+│                      #   modmgr/nexus/modlang/mods/palworlditems/items7dtd/sandbox/netinfo/util/stream
+├── tools/             # 游戏侧物料/提取脚本（palworld-ue4ss、7dtd-sandbox 选项表提取）
+├── assets/            # 内嵌资产（go:embed）：palworld 物品库/UE4SS、7dtd 沙盒选项表
 ├── static/            # 前端（index.html / app.js / style.css，go:embed 内嵌）
 ├── templates/         # 游戏模板 JSON（内置+导入都在这里）
 └── data/              # 全部状态：config.json（密码哈希、实例、计划任务）+ events.jsonl（事件日志），已 gitignore

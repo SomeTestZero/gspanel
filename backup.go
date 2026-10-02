@@ -98,10 +98,66 @@ func syncBackup(ctx context.Context, log io.Writer, inst *Instance, file, target
 	return nil
 }
 
+// backupEntry 备份归档里的一项：Member 为归档内名字（实例内=相对名，实例外=绝对名，tar -P 保留前导 /），
+// Abs 为磁盘上的源路径。旧备份（全相对名）恢复行为不变。
+type backupEntry struct {
+	Member string
+	Abs    string
+}
+
+// backupEntries 把模板 backup_paths 解析成实际打包项；尚不存在的路径跳过（同旧逻辑）
+func backupEntries(inst *Instance, tmpl *GameTemplate) ([]backupEntry, error) {
+	var out []backupEntry
+	for _, spec := range tmpl.BackupPaths {
+		if strings.HasPrefix(spec, "!") {
+			continue // 排除模式（tar --exclude），不是打包项
+		}
+		abs, err := resolveTemplatePath(inst, tmpl, spec)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := os.Stat(abs); err != nil {
+			continue
+		}
+		member := abs
+		if strings.HasPrefix(abs, inst.Dir+"/") {
+			member = strings.TrimPrefix(abs, inst.Dir+"/")
+		}
+		out = append(out, backupEntry{Member: member, Abs: abs})
+	}
+	return out, nil
+}
+
+// checkBackupMembers 解包前校验归档成员：拒绝 .. 逃逸，绝对名只允许 games 家目录下（防恶意上传包乱写盘）
+func checkBackupMembers(members []string) error {
+	for _, m := range members {
+		name := strings.TrimSuffix(strings.TrimPrefix(m, "./"), "/")
+		if name == "" {
+			continue
+		}
+		for _, seg := range strings.Split(name, "/") {
+			if seg == ".." {
+				return fmt.Errorf("备份包含非法路径: %s", m)
+			}
+		}
+		if strings.HasPrefix(name, "/") && name != GamesHome && !strings.HasPrefix(name, GamesHome+"/") {
+			return fmt.Errorf("备份包含越界路径: %s", m)
+		}
+	}
+	return nil
+}
+
 // createBackup 打包模板声明的 backup_paths；running 时给出一致性提示
 func createBackup(ctx context.Context, log io.Writer, inst *Instance, tmpl *GameTemplate, retention int) (string, error) {
 	if len(tmpl.BackupPaths) == 0 {
 		return "", fmt.Errorf("模板未声明备份路径")
+	}
+	entries, err := backupEntries(inst, tmpl)
+	if err != nil {
+		return "", err
+	}
+	if len(entries) == 0 {
+		return "", fmt.Errorf("没有可备份的内容（%s 尚不存在）", strings.Join(tmpl.BackupPaths, ", "))
 	}
 	if err := mkdirForGames(backupDir(inst)); err != nil {
 		return "", err
@@ -109,16 +165,20 @@ func createBackup(ctx context.Context, log io.Writer, inst *Instance, tmpl *Game
 	name := time.Now().Format("20060102-150405") + ".tar.gz"
 	dest := backupDir(inst) + "/" + name
 
-	args := []string{"czf", dest}
-	for _, p := range tmpl.BackupPaths {
-		if _, err := os.Stat(inst.Dir + "/" + p); err == nil {
-			args = append(args, p)
+	args := []string{"czf", dest, "-P"}
+	// "!" 前缀 = tar --exclude 排除模式（按归档内成员名匹配，GNU tar 通配符 * 含 /），
+	// 用来把 mod 的客户端资产等大块内容挡在备份外
+	for _, spec := range tmpl.BackupPaths {
+		if strings.HasPrefix(spec, "!") {
+			args = append(args, "--exclude="+strings.TrimPrefix(spec, "!"))
 		}
 	}
-	if len(args) == 2 {
-		return "", fmt.Errorf("没有可备份的内容（%s 尚不存在）", strings.Join(tmpl.BackupPaths, ", "))
+	members := make([]string, 0, len(entries))
+	for _, e := range entries {
+		args = append(args, e.Member)
+		members = append(members, e.Member)
 	}
-	fmt.Fprintf(log, "打包 %s -> %s\n", strings.Join(args[2:], ", "), dest)
+	fmt.Fprintf(log, "打包 %s -> %s\n", strings.Join(members, ", "), dest)
 	cmd := newCancellableCmd(ctx, "tar", args...)
 	cmd.Dir = inst.Dir
 	cmd.Stdout, cmd.Stderr = log, log
@@ -160,12 +220,25 @@ func (sv *Server) restoreBackup(ctx context.Context, log io.Writer, inst *Instan
 		}
 	}
 	fmt.Fprintf(log, "从 %s 恢复...\n", src)
-	cmd := newCancellableCmd(ctx, "tar", "xzf", src)
+	list := newCancellableCmd(ctx, "tar", "tzf", src)
+	var buf strings.Builder
+	list.Stdout, list.Stderr = &buf, &buf
+	if err := list.Run(); err != nil {
+		return fmt.Errorf("读取备份目录失败: %w", err)
+	}
+	members := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if err := checkBackupMembers(members); err != nil {
+		return fmt.Errorf("备份校验未通过，已中止恢复: %w", err)
+	}
+	// -P：实例外绝对名成员解到原位置，实例外相对名成员照旧解到实例目录（旧备份兼容）
+	cmd := newCancellableCmd(ctx, "tar", "xzf", src, "-P")
 	cmd.Dir = inst.Dir
 	cmd.Stdout, cmd.Stderr = log, log
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("解包失败: %w", err)
 	}
+	// 实例外恢复出来的文件属主是面板用户，chown 回 games
+	chownRestoredOutside(members, inst, tmpl)
 	// 迁移场景：备份里的 ini 是旧机器的端口/管理员密码，按面板记录重写，恢复后即可用
 	if tmpl.RCON != nil {
 		if err := sv.applyInstanceConfig(inst, tmpl, log); err != nil {
@@ -209,6 +282,33 @@ func saveUploadedBackup(inst *Instance, name string, src io.Reader) error {
 		return err
 	}
 	return chownToGames(dest)
+}
+
+// chownRestoredOutside 对恢复到实例外（games 家目录下）的文件 chown 回 games。
+// 命中模板声明的实例外路径就整目录递归 chown；零散成员退化为逐文件 chown。
+func chownRestoredOutside(members []string, inst *Instance, tmpl *GameTemplate) {
+	roots := templateOutsidePaths(inst, tmpl)
+	done := map[string]bool{}
+	for _, m := range members {
+		name := strings.TrimSuffix(strings.TrimPrefix(m, "./"), "/")
+		if !strings.HasPrefix(name, "/") {
+			continue
+		}
+		covered := false
+		for r := range roots {
+			if name == r || strings.HasPrefix(name, r+"/") {
+				if !done[r] {
+					chownRecursive(r)
+					done[r] = true
+				}
+				covered = true
+				break
+			}
+		}
+		if !covered {
+			_ = os.Chown(name, int(gamesUID), int(gamesGID))
+		}
+	}
 }
 
 func deleteBackup(inst *Instance, file string) error {

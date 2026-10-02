@@ -30,6 +30,7 @@ After=network.target
 Type=simple
 User=%s
 Group=%s
+Environment=HOME=%s
 WorkingDirectory=%s
 ExecStart=%s/start.sh
 Restart=on-failure
@@ -41,7 +42,7 @@ StandardError=inherit
 
 [Install]
 WantedBy=multi-user.target
-`, tmpl.Name, inst.Name, GamesUser, GamesUser, inst.Dir, inst.Dir, logFile)
+`, tmpl.Name, inst.Name, GamesUser, GamesUser, GamesHome, inst.Dir, inst.Dir, logFile)
 }
 
 // privHelper 特权助手：普通用户运行面板时，写 unit / 启停实例经 sudo 调用它。

@@ -1,0 +1,53 @@
+diff --git a/UE4SS/src/LuaType/LuaUObject.cpp b/UE4SS/src/LuaType/LuaUObject.cpp
+index a61b4ba..910ff29 100644
+--- a/UE4SS/src/LuaType/LuaUObject.cpp
++++ b/UE4SS/src/LuaType/LuaUObject.cpp
+@@ -733,8 +733,22 @@ namespace RC::LuaType
+         // params.base = Base of the object that this struct belongs in
+         // params.data = Start of the struct
+         // params.property = The corresponding FStructProperty
+-        auto* struct_property = Unreal::CastField<Unreal::FStructProperty>(params.property);
++        // Linux limited post-init does not populate FStructProperty::StaticClassStorage.
++        // CastField therefore returns nullptr even for a valid StructProperty, and the
++        // old code dereferenced nullptr+0x78. The dispatcher already uses reflected
++        // type names; validate the runtime cast flags instead of uninitialized storage.
++        if (!params.property || !params.property->GetClass().HasAllCastFlags(Unreal::CASTCLASS_FStructProperty))
++        {
++            params.throw_error("push_structproperty", "expected reflected StructProperty");
++            return;
++        }
++        auto* struct_property = static_cast<Unreal::FStructProperty*>(params.property);
+         Unreal::UScriptStruct* script_struct = struct_property->GetStruct();
++        if (!script_struct)
++        {
++            params.throw_error("push_structproperty", "StructProperty has no script struct");
++            return;
++        }
+ 
+         auto iterate_struct_and_turn_into_lua_table = [&](const LuaMadeSimple::Lua& lua, void* data_ptr) {
+             convert_struct_to_lua_table(
+@@ -1665,6 +1679,12 @@ namespace RC::LuaType
+             LuaType::FName::construct(params.lua, *name);
+             return;
+         case Operation::Set: {
++            // get_userdata<T> is an unchecked cast; a Lua string here used to SEGV.
++            if (!params.lua.is_userdata(params.stored_at_index))
++            {
++                params.throw_error("push_nameproperty", "expected FName userdata; use FName(itemID), not a string");
++                return;
++            }
+             auto& lua_object = params.lua.get_userdata<LuaType::FName>(params.stored_at_index);
+             *name = lua_object.get_local_cpp_object();
+             return;
+--- a/UE4SS/src/Mod/LuaMod.cpp
++++ b/UE4SS/src/Mod/LuaMod.cpp
+@@ -4420,6 +4420,9 @@
+             lua_setglobal(L, "EngineTickAvailable");
+             lua_pushboolean(L, UE4SSRuntime::IsProcessEventAvailable());
+             lua_setglobal(L, "ProcessEventAvailable");
++            // GSPanel: lets Lua fail closed before touching GUIDs with an old unsafe binary.
++            lua_pushinteger(L, 1);
++            lua_setglobal(L, "GSPanelPropertyBindingsVersion");
+         }
+ 
+         m_lua.register_function("ExecuteInGameThread", [](const LuaMadeSimple::Lua& lua) -> int {

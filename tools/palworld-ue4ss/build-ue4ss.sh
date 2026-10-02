@@ -18,8 +18,12 @@ if [ ! -d "$SRC/.git" ]; then
 fi
 cd "$SRC"
 echo "== 打补丁（Palworld 1.0.4 适配）"
-git checkout -- . 2>/dev/null || true
+if [ -n "$(git status --porcelain)" ]; then
+  echo "源码树有未提交修改，拒绝覆盖：$SRC（请用干净 clone，或自行增量 ninja 构建）" >&2
+  exit 1
+fi
 git apply "$TOOLDIR/patches/ue4ss-linux-palworld-1.0.4.patch"
+git apply "$TOOLDIR/patches/ue4ss-linux-palworld-properties.patch"
 
 echo "== 配置 (需要 CMake >= 3.23；22.04 自带 3.22 需自行升级，或确认补丁已包含 FILE_SET 兼容)"
 cmake -S . -B build -G Ninja \

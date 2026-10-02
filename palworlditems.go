@@ -41,13 +41,14 @@ type ItemEntry struct {
 
 // ItemDB 持久化的物品库（data/items/palworld.json 与内置基线同格式）
 type ItemDB struct {
-	Source      string      `json:"source"`
-	Culture     string      `json:"culture,omitempty"`
-	GeneratedAt string      `json:"generated_at,omitempty"`
-	GameBuild   string      `json:"game_build_id,omitempty"`
-	GameVersion string      `json:"game_version,omitempty"`
-	Count       int         `json:"count"`
-	Items       []ItemEntry `json:"items"`
+	Source      string            `json:"source"`
+	Culture     string            `json:"culture,omitempty"`
+	GeneratedAt string            `json:"generated_at,omitempty"`
+	GameBuild   string            `json:"game_build_id,omitempty"`
+	GameVersion string            `json:"game_version,omitempty"`
+	Count       int               `json:"count"`
+	Items       []ItemEntry       `json:"items"`
+	CatLabels   map[string]string `json:"cat_labels,omitempty"` // 分类 key -> 显示名（七日杀等自带分类的用）
 
 	// 以下字段只出现在 API 响应里，不落盘
 	Builtin    bool   `json:"builtin"`
@@ -128,8 +129,8 @@ func itemCategoryLabels() map[string]string {
 	}
 }
 
-// itemCategories 统计分类并翻译（按数量降序）
-func itemCategories(items []ItemEntry) []map[string]any {
+// itemCategories 统计分类并翻译（按数量降序）；extra 里的映射优先于帕鲁枚举词典
+func itemCategories(items []ItemEntry, extra map[string]string) []map[string]any {
 	labels := itemCategoryLabels()
 	counts := map[string]int{}
 	for _, it := range items {
@@ -141,7 +142,10 @@ func itemCategories(items []ItemEntry) []map[string]any {
 	}
 	out := make([]map[string]any, 0, len(counts))
 	for k, n := range counts {
-		label := labels[k]
+		label := extra[k]
+		if label == "" {
+			label = labels[k]
+		}
 		if label == "" {
 			label = k
 		}
@@ -166,6 +170,22 @@ func itemMatches(it ItemEntry, q string) bool {
 
 // ---------- HTTP ----------
 
+var errNoItemDB = fmt.Errorf("该模板没有物品库")
+
+// itemDBOf 按模板取物品库：帕鲁=mod 导出/内置基线，七日杀=游戏文件解析
+func itemDBOf(inst *Instance, tmpl *GameTemplate) (*ItemDB, error) {
+	if tmpl == nil {
+		return nil, errNoItemDB
+	}
+	switch tmpl.ID {
+	case "palworld":
+		return loadItemDB(inst)
+	case "7dtd":
+		return dtdItemDB(inst)
+	}
+	return nil, errNoItemDB
+}
+
 // handleItemsList GET /api/instances/{name}/items?q=&type=&limit=
 func (sv *Server) handleItemsList(w http.ResponseWriter, r *http.Request) {
 	inst := sv.getInstance(w, r)
@@ -173,13 +193,13 @@ func (sv *Server) handleItemsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tmpl := sv.templateOf(inst)
-	if tmpl == nil || tmpl.ID != "palworld" {
-		jsonError(w, http.StatusBadRequest, "该模板没有物品库")
-		return
-	}
-	db, err := loadItemDB(inst)
+	db, err := itemDBOf(inst, tmpl)
 	if err != nil {
-		jsonError(w, http.StatusInternalServerError, err.Error())
+		code := http.StatusBadRequest
+		if err != errNoItemDB {
+			code = http.StatusInternalServerError
+		}
+		jsonError(w, code, err.Error())
 		return
 	}
 
@@ -224,21 +244,37 @@ func (sv *Server) handleItemsList(w http.ResponseWriter, r *http.Request) {
 		"mod_version":    embeddedModVersion(),
 		"total":          db.Count,
 		"count":          total,
-		"categories":     itemCategories(db.Items),
+		"categories":     itemCategories(db.Items, db.CatLabels),
 		"items":          items,
 	})
 }
 
 // handleItemsRefresh POST /api/instances/{name}/items/refresh
-// 让游戏里的 mod 从 DT_ItemDataTable 导出全量物品（含中文名），缓存到 data/items/
+// 帕鲁：让游戏里的 mod 从 DT_ItemDataTable 导出全量物品（含中文名），缓存到 data/items/
+// 七日杀：物品来自游戏文件，这里重扫一遍（mod 增删/游戏更新后用）
 func (sv *Server) handleItemsRefresh(w http.ResponseWriter, r *http.Request) {
 	inst := sv.getInstance(w, r)
 	if inst == nil {
 		return
 	}
 	tmpl := sv.templateOf(inst)
-	if tmpl == nil || tmpl.ID != "palworld" {
-		jsonError(w, http.StatusBadRequest, "该模板没有物品库")
+	if tmpl == nil {
+		jsonError(w, http.StatusBadRequest, errNoItemDB.Error())
+		return
+	}
+	if tmpl.ID == "7dtd" {
+		dtdItemCache.Delete(inst.Dir)
+		db, err := dtdItemDB(inst)
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		sv.events.Add(inst.Name, "items", "重扫游戏物品表：%d 项", db.Count)
+		jsonOK(w, map[string]any{"ok": true, "count": db.Count, "message": fmt.Sprintf("已重新扫描游戏物品表：%d 项", db.Count)})
+		return
+	}
+	if tmpl.ID != "palworld" {
+		jsonError(w, http.StatusBadRequest, errNoItemDB.Error())
 		return
 	}
 	if !hasGiveMod(inst) {
@@ -322,10 +358,19 @@ func (sv *Server) handleItemsRefresh(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleModPlayers GET /api/instances/{name}/players
-// 走 mod 的 whojson 命令，返回结构化在线玩家（给物品对话框的下拉框用）
+// 在线玩家（给物品对话框的下拉框用）：帕鲁走 mod 的 whojson，七日杀走 telnet `lp`
 func (sv *Server) handleModPlayers(w http.ResponseWriter, r *http.Request) {
 	inst := sv.getInstance(w, r)
 	if inst == nil {
+		return
+	}
+	if tmpl := sv.templateOf(inst); tmpl != nil && tmpl.ID == "7dtd" {
+		players, err := dtdListPlayers(inst, tmpl)
+		if err != nil {
+			jsonError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		jsonOK(w, map[string]any{"players": players})
 		return
 	}
 	if !hasGiveMod(inst) {

@@ -40,9 +40,9 @@ type Instance struct {
 	ConfigValues map[string]map[string]string `json:"config_values,omitempty"`
 	Installed    bool                         `json:"installed"`
 	AutoUpdate   bool                         `json:"auto_update,omitempty"` // 轮询检测到新版本时自动更新
-	UE4SS        bool                         `json:"ue4ss,omitempty"`         // Palworld 扩展命令（UE4SS mod）：由面板安装并注入 start.sh
-	Schedules     []*Schedule       `json:"schedules,omitempty"`
-	CreatedAt     time.Time         `json:"created_at"`
+	UE4SS        bool                         `json:"ue4ss,omitempty"`       // Palworld 扩展命令（UE4SS mod）：由面板安装并注入 start.sh
+	Schedules    []*Schedule                  `json:"schedules,omitempty"`
+	CreatedAt    time.Time                    `json:"created_at"`
 }
 
 var instanceNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,29}$`)
@@ -50,19 +50,24 @@ var instanceNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,29}$`)
 // ---------- 面板全局状态 ----------
 
 type State struct {
-	mu           sync.RWMutex
-	path         string
-	Bind         string `json:"bind"`
-	Port         int    `json:"port"`
-	PublicIP     string `json:"public_ip,omitempty"` // 手动覆盖公网地址，留空自动探测
-	SyncTarget   string `json:"sync_target,omitempty"` // 已废弃：单目标旧字段，加载时迁移进 SyncTargets
-	SyncTargets  []string `json:"sync_targets,omitempty"` // 备份异地同步 SSH 目标列表（如 yecao2、user@host），空=关闭
-	PasswordSalt string `json:"password_salt"`
-	PasswordHash string `json:"password_hash"`
-	Instances    map[string]*Instance `json:"instances"`
-	Sessions     map[string]time.Time `json:"sessions,omitempty"` // 持久化会话：面板重启不踢人
+	mu          sync.RWMutex
+	path        string
+	Bind        string   `json:"bind"`
+	Port        int      `json:"port"`
+	PublicIP    string   `json:"public_ip,omitempty"`     // 手动覆盖公网地址，留空自动探测
+	SyncTarget  string   `json:"sync_target,omitempty"`   // 已废弃：单目标旧字段，加载时迁移进 SyncTargets
+	SyncTargets []string `json:"sync_targets,omitempty"`  // 备份异地同步 SSH 目标列表（如 yecao2、user@host），空=关闭
+	NexusAPIKey string   `json:"nexus_api_key,omitempty"` // NexusMods API key（mod 在线搜索/安装）
+	// Mod 中文翻译：OpenAI 兼容接口（留空则用免费接口 + 内置词典）
+	TranslateBaseURL string               `json:"translate_base_url,omitempty"`
+	TranslateAPIKey  string               `json:"translate_api_key,omitempty"`
+	TranslateModel   string               `json:"translate_model,omitempty"`
+	PasswordSalt     string               `json:"password_salt"`
+	PasswordHash     string               `json:"password_hash"`
+	Instances        map[string]*Instance `json:"instances"`
+	Sessions         map[string]time.Time `json:"sessions,omitempty"` // 持久化会话：面板重启不踢人
 
-	loginMu  sync.Mutex
+	loginMu   sync.Mutex
 	loginFail map[string][]time.Time // IP -> 失败时间（内存态）
 }
 

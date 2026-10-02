@@ -1,19 +1,849 @@
 {
   "id": "7dtd",
   "name": "七日杀 7 Days to Die",
-  "description": "7 Days to Die 专用服务器，配置为 XML 文件（raw 模式编辑）。",
+  "description": "7 Days to Die 专用服务器（V2/V3 系版本）。配置为 serverconfig.xml（GUI 全量可配），控制台命令走 telnet 管理口，支持文件夹式 Mod 管理与 NexusMods 在线安装。",
   "steam_app_id": 294420,
   "anonymous_login": true,
   "executable": "./7DaysToDieServer.x86_64",
-  "default_args": ["-quit", "-batchmode", "-nographics", "-dedicated", "-configfile=serverconfig.xml"],
-  "stop_mode": "sigterm",
-  "stop_warn_secs": 0,
+  "default_args": [
+    "-quit",
+    "-batchmode",
+    "-nographics",
+    "-dedicated",
+    "-configfile=serverconfig.xml"
+  ],
+  "stop_mode": "rcon",
+  "stop_warn_secs": 10,
+  "rcon": {
+    "type": "telnet",
+    "config_path": "serverconfig.xml"
+  },
+  "console_buttons": [
+    {
+      "label": "在线玩家",
+      "command": "lp"
+    },
+    {
+      "label": "立即存档",
+      "command": "saveworld"
+    },
+    {
+      "label": "沙盒选项",
+      "command": "gso"
+    },
+    {
+      "label": "广播…",
+      "command": "say",
+      "prompt": "广播内容（发给全服玩家）:"
+    },
+    {
+      "label": "游戏时间",
+      "command": "time"
+    },
+    {
+      "label": "踢人…",
+      "command": "kick",
+      "prompt": "玩家名（可加原因）:"
+    },
+    {
+      "label": "封禁…",
+      "command": "ban",
+      "prompt": "玩家名:"
+    },
+    {
+      "label": "内存",
+      "command": "mem"
+    },
+    {
+      "label": "帮助",
+      "command": "help"
+    }
+  ],
   "ports": [
-    { "key": "game", "default": 26900, "proto": "tcp", "desc": "游戏端口（26900-26902 TCP+UDP）", "public": true }
+    {
+      "key": "game",
+      "default": 26900,
+      "proto": "tcp",
+      "desc": "游戏端口（26900 TCP+UDP 都要用；26902 UDP 为 EOS 联机，需一并放行）",
+      "public": true
+    }
   ],
   "configs": [
-    { "path": "serverconfig.xml", "format": "raw", "seed_from": "serverconfig.xml", "label": "服务器配置 (serverconfig.xml)" }
+    {
+      "path": "serverconfig.xml",
+      "format": "xmlkv",
+      "seed_from": "serverconfig.xml",
+      "label": "服务器配置 (serverconfig.xml)",
+      "schema": [
+        {
+          "key": "ServerName",
+          "label": "服务器名称",
+          "group": "基础信息",
+          "type": "string",
+          "default": "My Game Host",
+          "desc": "服务器在游戏大厅列表里显示的名字。"
+        },
+        {
+          "key": "ServerDescription",
+          "label": "服务器描述",
+          "group": "基础信息",
+          "type": "string",
+          "default": "A 7 Days to Die server",
+          "desc": "服务器列表里展示的简介文字。"
+        },
+        {
+          "key": "ServerWebsiteURL",
+          "label": "官网 / 群地址",
+          "group": "基础信息",
+          "type": "string",
+          "default": "",
+          "desc": "服务器列表里可点击的链接，填你的官网/群/论坛地址，留空则不显示。"
+        },
+        {
+          "key": "ServerPassword",
+          "label": "进入服务器密码",
+          "group": "基础信息",
+          "type": "password",
+          "default": "",
+          "desc": "玩家进入服务器需要输入的密码；留空 = 不需要密码。"
+        },
+        {
+          "key": "ServerLoginConfirmationText",
+          "label": "进服确认公告",
+          "group": "基础信息",
+          "type": "string",
+          "default": "",
+          "desc": "玩家进入时弹出的确认文字（如规则、免责声明），玩家需点确认才能进入；留空 = 不弹。"
+        },
+        {
+          "key": "Region",
+          "label": "服务器地区",
+          "group": "基础信息",
+          "type": "select",
+          "default": "NorthAmericaEast",
+          "options": [
+            "NorthAmericaEast",
+            "NorthAmericaWest",
+            "CentralAmerica",
+            "SouthAmerica",
+            "Europe",
+            "Russia",
+            "Asia",
+            "MiddleEast",
+            "Africa",
+            "Oceania"
+          ],
+          "desc": "服务器所在地区，影响大厅列表的区域分类。国内一般选 Asia。"
+        },
+        {
+          "key": "Language",
+          "label": "服务器语言",
+          "group": "基础信息",
+          "type": "string",
+          "default": "English",
+          "desc": "服务器主要语言，玩家搜索时会用到。填语言英文名（如 Chinese、English）。"
+        },
+        {
+          "key": "ServerPort",
+          "label": "游戏端口",
+          "group": "网络",
+          "type": "int",
+          "default": 26900,
+          "min": 1,
+          "max": 65535,
+          "desc": "服务器监听端口。官方建议用 26900-26905 或 27015-27020 区间（局域网发现需要）。注意：改这里需与实例端口设置、防火墙/安全组保持一致。"
+        },
+        {
+          "key": "ServerVisibility",
+          "label": "大厅可见性",
+          "group": "网络",
+          "type": "select",
+          "default": "2",
+          "options": [
+            "2",
+            "1",
+            "0"
+          ],
+          "desc": "2 = 公开（大厅可搜到，推荐）；1 = 仅好友可见（专用服务器没好友意义不大，等于需 IP 直连）；0 = 不公开（只能 IP 直连）。"
+        },
+        {
+          "key": "ServerDisabledNetworkProtocols",
+          "label": "禁用的网络协议",
+          "group": "网络",
+          "type": "select",
+          "default": "SteamNetworking",
+          "options": [
+            "SteamNetworking",
+            "LiteNetLib",
+            "LiteNetLib,SteamNetworking",
+            ""
+          ],
+          "desc": "逗号分隔可选 LiteNetLib / SteamNetworking。服务器与玩家之间没有 NAT 路由器或已正确端口转发时，官方建议禁用 SteamNetworking（默认值）；此项改动重启生效。"
+        },
+        {
+          "key": "ServerMaxWorldTransferSpeedKiBs",
+          "label": "世界传输限速 KiB/s",
+          "group": "网络",
+          "type": "int",
+          "default": 512,
+          "min": 0,
+          "max": 1300,
+          "desc": "新玩家首次进服下载世界的最大速度（KiB/s）。上限约 1300，设更高也到不了。调大加快进服但占带宽。"
+        },
+        {
+          "key": "ServerMaxPlayerCount",
+          "label": "最大玩家数",
+          "group": "玩家位",
+          "type": "int",
+          "default": 8,
+          "desc": "同时在线人数上限。开跨平台（ServerAllowCrossplay）时官方要求默认或更少的槽位数。"
+        },
+        {
+          "key": "ServerReservedSlots",
+          "label": "保留位数量",
+          "group": "玩家位",
+          "type": "int",
+          "default": 0,
+          "desc": "从最大玩家数中预留出来、只有特定权限等级玩家可用的槽位数。0 = 不预留。"
+        },
+        {
+          "key": "ServerReservedSlotsPermission",
+          "label": "保留位所需权限",
+          "group": "玩家位",
+          "type": "int",
+          "default": 100,
+          "desc": "使用保留位所需的最低权限等级（0-1000，数字越小权限越高；普通玩家 1000、管理员 0）。默认 100 ≈ 仅管理员/受信用户可用；想让所有普通玩家都能用保留位则设 1000。"
+        },
+        {
+          "key": "ServerAdminSlots",
+          "label": "管理员溢出位",
+          "group": "玩家位",
+          "type": "int",
+          "default": 0,
+          "desc": "服务器满员时额外允许进入的管理员数量。0 = 不留。"
+        },
+        {
+          "key": "ServerAdminSlotsPermission",
+          "label": "溢出位所需权限",
+          "group": "玩家位",
+          "type": "int",
+          "default": 0,
+          "desc": "使用管理员溢出位所需的最低权限等级（0 = 仅管理员）。"
+        },
+        {
+          "key": "WebDashboardEnabled",
+          "label": "Web 面板",
+          "group": "管理接口",
+          "type": "select",
+          "default": "false",
+          "options": [
+            "true",
+            "false"
+          ],
+          "desc": "是否启用游戏自带的 Web 控制面板。GSPanel 已提供控制台，一般保持关闭。"
+        },
+        {
+          "key": "WebDashboardPort",
+          "label": "Web 面板端口",
+          "group": "管理接口",
+          "type": "int",
+          "default": 8080,
+          "desc": "Web 面板监听端口（启用 Web 面板时才生效）。"
+        },
+        {
+          "key": "WebDashboardUrl",
+          "label": "Web 面板外网地址",
+          "group": "管理接口",
+          "type": "string",
+          "default": "",
+          "desc": "Web 面板经反向代理等外部访问时的完整 URL（如 https://domain.tld:1234/）；直接 IP 访问可留空。"
+        },
+        {
+          "key": "EnableMapRendering",
+          "label": "地图渲染",
+          "group": "管理接口",
+          "type": "select",
+          "default": "false",
+          "options": [
+            "true",
+            "false"
+          ],
+          "desc": "探索时把地图渲染成图片瓦片（Web 面板的地图展示依赖它）。不开省性能。"
+        },
+        {
+          "key": "TelnetEnabled",
+          "label": "Telnet 控制台",
+          "group": "管理接口",
+          "type": "select",
+          "default": "true",
+          "options": [
+            "true",
+            "false"
+          ],
+          "desc": "telnet 管理接口开关。GSPanel 的控制台命令、优雅停服都依赖它，保持开启。"
+        },
+        {
+          "key": "TelnetPort",
+          "label": "Telnet 端口",
+          "group": "管理接口",
+          "type": "int",
+          "default": 8081,
+          "desc": "telnet 管理接口监听端口。面板从本机回环连接，不需要对外开放。"
+        },
+        {
+          "key": "TelnetPassword",
+          "label": "Telnet 密码",
+          "group": "管理接口",
+          "type": "password",
+          "default": "",
+          "note": "强烈建议留空（仅本机可连，面板功能完全可用且最安全）",
+          "desc": "telnet 管理口密码。⚠️ 留空时游戏只监听本机回环（最安全，面板走 127.0.0.1）；设置密码后 telnet 会监听所有网卡，需自行做好防火墙并妥善保管密码。"
+        },
+        {
+          "key": "TelnetFailedLoginLimit",
+          "label": "Telnet 允许错次",
+          "group": "管理接口",
+          "type": "int",
+          "default": 10,
+          "desc": "同一客户端密码输错这么多次后拉黑。"
+        },
+        {
+          "key": "TelnetFailedLoginsBlocktime",
+          "label": "Telnet 拉黑时长（秒）",
+          "group": "管理接口",
+          "type": "int",
+          "default": 10,
+          "desc": "被拉黑的客户端需要等待的解封时间（秒）。"
+        },
+        {
+          "key": "TerminalWindowEnabled",
+          "label": "本地终端窗口",
+          "group": "管理接口",
+          "type": "select",
+          "default": "true",
+          "options": [
+            "true",
+            "false"
+          ],
+          "desc": "是否弹出本地终端窗口用于看日志/输命令（仅 Windows 有影响；Linux 专用服务器无效果）。"
+        },
+        {
+          "key": "AdminFileName",
+          "label": "管理员名单文件",
+          "group": "管理接口",
+          "type": "string",
+          "default": "serveradmin.xml",
+          "desc": "管理员权限配置文件名（相对于 Saves 目录）。在游戏内用 admin 命令或直接编辑该文件授权。"
+        },
+        {
+          "key": "ServerAllowCrossplay",
+          "label": "允许跨平台",
+          "group": "联机与反作弊",
+          "type": "select",
+          "default": "false",
+          "options": [
+            "true",
+            "false"
+          ],
+          "desc": "是否允许 PC/主机跨平台联机。开启后只有未被平台制裁（IgnoreEOSSanctions 开启或玩家干净）的玩家可搜到/加入，且对人数槽位有默认或更低的要求。"
+        },
+        {
+          "key": "EACEnabled",
+          "label": "EasyAntiCheat 反作弊",
+          "group": "联机与反作弊",
+          "type": "select",
+          "default": "true",
+          "options": [
+            "true",
+            "false"
+          ],
+          "desc": "是否启用 EAC 反作弊。关闭后纯净客户端也能进，但外挂风险大增；默认开启。"
+        },
+        {
+          "key": "IgnoreEOSSanctions",
+          "label": "忽略 EOS 制裁",
+          "group": "联机与反作弊",
+          "type": "select",
+          "default": "false",
+          "options": [
+            "true",
+            "false"
+          ],
+          "desc": "是否允许被 EOS 平台制裁（封禁记录）的玩家加入。一般保持关闭。"
+        },
+        {
+          "key": "HideCommandExecutionLog",
+          "label": "隐藏命令执行日志",
+          "group": "存档与区块",
+          "type": "select",
+          "default": "0",
+          "options": [
+            "0",
+            "1",
+            "2",
+            "3"
+          ],
+          "desc": "命令执行记录的隐藏级别：0 = 全部显示；1 = 对 Telnet/控制面板隐藏；2 = 还对远程游戏客户端隐藏；3 = 全部隐藏。"
+        },
+        {
+          "key": "MaxUncoveredMapChunksPerPlayer",
+          "label": "每人地图揭示上限",
+          "group": "存档与区块",
+          "type": "int",
+          "default": 131072,
+          "desc": "每个玩家地图最多可揭开的区块数（每块 256m²，文件占 512 字节）。默认 131072 = 最多揭示 32 km²，控制地图文件体积。"
+        },
+        {
+          "key": "PersistentPlayerProfiles",
+          "label": "固定玩家档案",
+          "group": "存档与区块",
+          "type": "select",
+          "default": "false",
+          "options": [
+            "true",
+            "false"
+          ],
+          "desc": "false = 玩家进服可任选角色档案；true = 强制使用上次进服的档案（防小号/换档刷物品）。"
+        },
+        {
+          "key": "MaxChunkAge",
+          "label": "区块重置天数",
+          "group": "存档与区块",
+          "type": "int",
+          "default": -1,
+          "desc": "多少个游戏日内没被访问的区块恢复原始状态（-1 = 永不重置）。领地石/睡袋保护范围内的区块不受影响。"
+        },
+        {
+          "key": "SaveDataLimit",
+          "label": "存档空间上限 MB",
+          "group": "存档与区块",
+          "type": "int",
+          "default": -1,
+          "desc": "单个存档允许占用的最大磁盘空间（MB），超限会强制重置部分区块回收空间；负数 = 不限制。"
+        },
+        {
+          "key": "GameWorld",
+          "label": "世界",
+          "group": "世界与存档",
+          "type": "string",
+          "default": "Navezgane",
+          "note": "与 WorldGenSeed/WorldGenSize/GameName 同属存档标识，改动 = 另开新存档",
+          "desc": "使用哪个世界：\"RWG\" = 按种子随机生成（见下面的种子/尺寸）；或填 Worlds 目录里已有的世界名（如 Navezgane、Pregen06k01、Pregen08k01 等预生成世界）。"
+        },
+        {
+          "key": "WorldGenSeed",
+          "label": "随机世界种子",
+          "group": "世界与存档",
+          "type": "string",
+          "default": "MyGame",
+          "desc": "GameWorld=RWG 时生成世界的随机种子；同名世界已存在则直接加载。只影响 RWG 世界的地形。"
+        },
+        {
+          "key": "WorldGenSize",
+          "label": "随机世界尺寸",
+          "group": "世界与存档",
+          "type": "select",
+          "default": "6144",
+          "options": [
+            "6144",
+            "8192",
+            "10240"
+          ],
+          "desc": "RWG 世界的边长（格）。官方支持 6144/8192/10240（2048 的倍数）。越大生成越慢、存档越大。"
+        },
+        {
+          "key": "GameName",
+          "label": "存档名",
+          "group": "世界与存档",
+          "type": "string",
+          "default": "MyGame",
+          "note": "改动 = 另开新存档",
+          "desc": "存档名称（允许字母数字 _-. ），决定存档目录名，也影响树木等装饰物的放置种子；不控制 RWG 地形。"
+        },
+        {
+          "key": "GameMode",
+          "label": "游戏模式",
+          "group": "世界与存档",
+          "type": "select",
+          "default": "GameModeSurvival",
+          "options": [
+            "GameModeSurvival"
+          ],
+          "desc": "游戏模式，官方目前只有生存模式 GameModeSurvival。"
+        },
+        {
+          "key": "PlayerSafeZoneLevel",
+          "label": "新手保护等级",
+          "group": "难度与安全区",
+          "type": "int",
+          "default": 5,
+          "desc": "等级小于等于该值的新玩家出生时自带安全区（周围不刷怪）。"
+        },
+        {
+          "key": "PlayerSafeZoneHours",
+          "label": "新手保护时长（小时）",
+          "group": "难度与安全区",
+          "type": "int",
+          "default": 5,
+          "desc": "新手安全区在游戏时间里持续多少小时。"
+        },
+        {
+          "key": "SandboxCode",
+          "label": "沙盒难度代码",
+          "group": "难度与安全区",
+          "type": "string",
+          "default": "AAAJABJACJADJARFBNC",
+          "note": "预设代码已经游戏本体回环校验；细调单项用「沙盒选项编辑器」，或在游戏客户端沙盒选项生成整段代码",
+          "desc": "一整套难度/玩法参数（150+ 项）的压缩编码，含难度、死亡掉落、血月、战利品等全部玩法规则。「沙盒选项编辑器」可逐项查看/修改（含中文说明）并自动生成代码；下面按钮是官方内置预设（难度 6 档 + 官方整活 11 档，已转换为 V3.2 可用代码），点击即填充。填完保存并重启生效（对已有存档也生效，无需开新世界）。也可用「解码当前值」按钮（等价控制台 gso）核对当前代码的实际含义。",
+          "sandbox_options": "7dtd-v3.2",
+          "presets": [
+            {
+              "label": "Scavenger 拾荒者（2/9）",
+              "value": "AAAKABKACKADKARDBNB",
+              "note": "休闲入门，玩家输出高、承伤低"
+            },
+            {
+              "label": "Adventurer 冒险者（3/9）",
+              "value": "AAAJABJACJADJARFBNC",
+              "note": "官方默认（当前值）"
+            },
+            {
+              "label": "Nomad 流浪者（4/9）",
+              "value": "A",
+              "note": "原版基准：全默认值"
+            },
+            {
+              "label": "Warrior 战士（5/9）",
+              "value": "AAAGABGACGADGARJBND",
+              "note": "硬核战斗"
+            },
+            {
+              "label": "True Survivalist 真·求生者（6/9）",
+              "value": "AAAEABEACEADEARKBNE",
+              "note": "老手向，资源与战斗双压"
+            },
+            {
+              "label": "Insane 疯狂（7/9）",
+              "value": "AAADABDACDADDARLBNF",
+              "note": "极限难度"
+            },
+            {
+              "label": "Almost Creative 准创造（1/9）",
+              "value": "ABEABTBBWADFNGBB",
+              "note": "近创造模式：不刷怪、无血月、资源丰富"
+            },
+            {
+              "label": "Chibi Mode Q版小人（3/9）",
+              "value": "AAAJABJACJADJAEIAFJAGIAHJAIEAJDAKEAMJAQBARFASGAUBAVCAYBAZBBAABBABDCBIBBKEBLEBMBBNCBSEBTEBUEBZDCACCLDCMDCNDCVHCXBCYCDAIDMJDNIDOIDPGDTGDXIDYIEBGEEGENDETFEXFFLGFMJFOGFQCFRBFSBFUBGAEGBEGCE",
+              "note": "Q 版小人：全员小体型、快节奏"
+            },
+            {
+              "label": "Dumpster Diver 翻垃圾（4/9）",
+              "value": "AAUABUCCABCVLCXBDALDFJDKDDMKDNADOADVGDXADYBDZFEABEXFFKAGCC",
+              "note": "捡垃圾致富：高战利品"
+            },
+            {
+              "label": "Legacy Survival 经典生存（4/9）",
+              "value": "AAHIAJDAMLAPAAUABACBNCBOABPABREBSCBUEBVACBACDACGACNDCVGCXBDDGDJIDNJDOJDSAEABEBGELAEOAEPAEQAFAFFEDFIDFKAGACGCE",
+              "note": "怀旧 Alpha 生存体验"
+            },
+            {
+              "label": "Disaster Film 灾难片（5/9）",
+              "value": "AAVFAXBAYDAZFBDFBVACFHDAKDDJDKFEKFFOJ",
+              "note": "灾难片模式：极端天气加血月"
+            },
+            {
+              "label": "Caveman Life 穴居人（6/9）",
+              "value": "AAADABJBTFCAACDACQACRACWBDNADOADWBEWAEZAFGBFKAFPAGBF",
+              "note": "原始人：科技被锁死"
+            },
+            {
+              "label": "Dying World 濒死世界（6/9）",
+              "value": "AAMABTBCAACXADMADOAEBAEJAEOAEPAFDIFEAFHIFIAFJAGBB",
+              "note": "资源枯竭的世界"
+            },
+            {
+              "label": "Undead Matinee 丧尸影院（6/9）",
+              "value": "AAAFABIACGADGAEIAFIAGHAHEAJCAKEAMFAPAAQCARJAVEAWBAXBAYDAZDBACBDGBFKBJABKABLBBMBBNCBPJBQEBSEBUEBZFCAGCFECIDCJDCVECYDDBDDCDDDDDEBDGDDHJDIBDKFEKDFDFFHFGAEGCE",
+              "note": "丧尸电影场：怪多弹少"
+            },
+            {
+              "label": "Seven days Later 尸潮来袭（7/9）",
+              "value": "AAAGABGACGADGAPAARJAWFAXBAYDBACBICBJCBKCBLCBMCBPFBSEBUEBYCBZFGAEGCE",
+              "note": "狂奔尸潮 + 巨型血月"
+            },
+            {
+              "label": "Madmole's Mayhem 主策疯狂（8/9）",
+              "value": "AAAGABGACGAMIAPAAWBAXCAZEBACBFIBGIBHIBIBBKEBLEBNFBSEBUEBZFCIDCJDCVDDCDDDDDEDDFDDGDDJFEXFGAEGCE",
+              "note": "主策 Madmole 的私房硬核"
+            },
+            {
+              "label": "Bite Club 咬人俱乐部（9/9）",
+              "value": "AAAGABGACGADGAHJARJBADBDGBIBBMCBNEBPFBZFCFDCXADADEYA",
+              "note": "官方最高难度：一命通关"
+            }
+          ],
+          "decode_command": "gso"
+        },
+        {
+          "key": "BuildCreate",
+          "label": "创造/作弊模式",
+          "group": "游戏规则",
+          "type": "select",
+          "default": "false",
+          "options": [
+            "true",
+            "false"
+          ],
+          "desc": "作弊模式开关：开启后玩家可用创造菜单随意拿物品、飞行建造。仅建议私人服/测试服开。"
+        },
+        {
+          "key": "BedrollDeadZoneSize",
+          "label": "睡袋禁刷半径",
+          "group": "游戏规则",
+          "type": "int",
+          "default": 15,
+          "desc": "睡袋周围不刷僵尸的方形区域半径（实际边长为该值×2），已被清理的丧尸房触及此区域也不再刷新。"
+        },
+        {
+          "key": "BedrollExpiryTime",
+          "label": "睡袋有效期（天）",
+          "group": "游戏规则",
+          "type": "int",
+          "default": 45,
+          "desc": "玩家最后上线后多少个现实天，其睡袋失效。"
+        },
+        {
+          "key": "AllowSpawnNearFriend",
+          "label": "允许在好友旁出生",
+          "group": "游戏规则",
+          "type": "select",
+          "default": "2",
+          "options": [
+            "2",
+            "1",
+            "0"
+          ],
+          "desc": "新玩家首次进服能否选择在好友身边出生：0 = 禁用；1 = 总是允许；2 = 仅森林生物群系的好友旁。"
+        },
+        {
+          "key": "CameraRestrictionMode",
+          "label": "视角限制",
+          "group": "游戏规则",
+          "type": "select",
+          "default": "0",
+          "options": [
+            "0",
+            "1",
+            "2"
+          ],
+          "desc": "0 = 一/三人称自由切换；1 = 锁第一人称；2 = 锁第三人称。PVP 服常锁第一人称防卡视角。"
+        },
+        {
+          "key": "MaxSpawnedZombies",
+          "label": "僵尸刷新上限",
+          "group": "性能",
+          "type": "int",
+          "default": 64,
+          "note": "对性能影响大",
+          "desc": "全图同时存在的僵尸总数上限（会按场景缩放：血月 ×1.9、睡尸 ×2.1）。调大更热闹但显著增加 CPU/内存压力。"
+        },
+        {
+          "key": "MaxSpawnedAnimals",
+          "label": "动物刷新上限",
+          "group": "性能",
+          "type": "int",
+          "default": 50,
+          "desc": "全图动物总数上限。玩家多且分散时可适当调大；动物不吃太多 CPU。注意：不会凭空多刷，只放宽上限。"
+        },
+        {
+          "key": "ServerMaxAllowedViewDistance",
+          "label": "最大视距",
+          "group": "性能",
+          "type": "int",
+          "default": 12,
+          "min": 6,
+          "max": 12,
+          "desc": "客户端能请求的最大视距（6-12）。对服务器内存和性能影响大，人多可调低。"
+        },
+        {
+          "key": "MaxQueuedMeshLayers",
+          "label": "网格生成队列",
+          "group": "性能",
+          "type": "int",
+          "default": 1000,
+          "desc": "区块网格生成的最大排队层数。调小省内存，但区块生成（进新区域）变慢。"
+        },
+        {
+          "key": "PartySharedKillRange",
+          "label": "组队共享击杀距离",
+          "group": "多人游戏",
+          "type": "int",
+          "default": 100,
+          "desc": "多远距离内的队友能共享击杀经验和任务击杀计数（格）。"
+        },
+        {
+          "key": "PlayerKillingMode",
+          "label": "PVP 模式",
+          "group": "多人游戏",
+          "type": "select",
+          "default": "3",
+          "options": [
+            "3",
+            "2",
+            "1",
+            "0"
+          ],
+          "desc": "0 = 禁止 PK；1 = 仅可杀队友；2 = 仅可杀陌生人；3 = 谁都能杀（默认）。PVE 服请设 0。"
+        },
+        {
+          "key": "LandClaimCount",
+          "label": "每人领地石数量",
+          "group": "领地石",
+          "type": "int",
+          "default": 5,
+          "desc": "每个玩家最多可放置的领地石（方块）数量。"
+        },
+        {
+          "key": "LandClaimSize",
+          "label": "领地保护边长",
+          "group": "领地石",
+          "type": "int",
+          "default": 41,
+          "desc": "领地石保护区域的边长（格）。"
+        },
+        {
+          "key": "LandClaimDeadZone",
+          "label": "领地石最小间距",
+          "group": "领地石",
+          "type": "int",
+          "default": 30,
+          "desc": "两个玩家的领地石至少相隔多少格（好友不受限）。"
+        },
+        {
+          "key": "LandClaimExpiryTime",
+          "label": "领地过期天数",
+          "group": "领地石",
+          "type": "int",
+          "default": 7,
+          "desc": "玩家离线多少个现实天后领地保护失效。防弃坑占地。"
+        },
+        {
+          "key": "LandClaimDecayMode",
+          "label": "离线衰减模式",
+          "group": "领地石",
+          "type": "select",
+          "default": "0",
+          "options": [
+            "0",
+            "1",
+            "2"
+          ],
+          "desc": "玩家离线期间领地硬度衰减方式：0 = 慢（线性）；1 = 快（指数）；2 = 不衰减（直到过期都完整保护）。"
+        },
+        {
+          "key": "LandClaimOnlineDurabilityModifier",
+          "label": "在线硬度倍率",
+          "group": "领地石",
+          "type": "int",
+          "default": 4,
+          "desc": "玩家在线时领地内方块硬度提升倍数。0 = 无限（完全打不坏）。默认 4 倍。"
+        },
+        {
+          "key": "LandClaimOfflineDurabilityModifier",
+          "label": "离线硬度倍率",
+          "group": "领地石",
+          "type": "int",
+          "default": 4,
+          "desc": "玩家离线时领地内方块硬度提升倍数。0 = 无限。默认 4 倍。"
+        },
+        {
+          "key": "LandClaimOfflineDelay",
+          "label": "离线保护延迟（分钟）",
+          "group": "领地石",
+          "type": "int",
+          "default": 0,
+          "desc": "玩家下线多少分钟后，领地硬度从在线倍率切换为离线倍率。默认 0 = 立即切换。"
+        },
+        {
+          "key": "DynamicMeshEnabled",
+          "label": "动态网格",
+          "group": "动态网格",
+          "type": "select",
+          "default": "true",
+          "options": [
+            "true",
+            "false"
+          ],
+          "desc": "动态网格系统开关（处理挖掘/建造后区块外观的动态更新）。"
+        },
+        {
+          "key": "DynamicMeshLandClaimOnly",
+          "label": "仅领地内生效",
+          "group": "动态网格",
+          "type": "select",
+          "default": "true",
+          "options": [
+            "true",
+            "false"
+          ],
+          "desc": "动态网格只在玩家领地石范围内工作（默认），大幅省性能。"
+        },
+        {
+          "key": "DynamicMeshLandClaimBuffer",
+          "label": "领地缓冲区块",
+          "group": "动态网格",
+          "type": "int",
+          "default": 3,
+          "desc": "动态网格在领地范围外额外覆盖的区块半径。"
+        },
+        {
+          "key": "DynamicMeshMaxItemCache",
+          "label": "网格缓存条目",
+          "group": "动态网格",
+          "type": "int",
+          "default": 3,
+          "desc": "同时处理的物品缓存数量，越高越吃内存但网格生成更快。"
+        },
+        {
+          "key": "TwitchServerPermission",
+          "label": "Twitch 权限等级",
+          "group": "Twitch 直播联动",
+          "type": "int",
+          "default": 90,
+          "desc": "使用 Twitch 直播联动功能所需的权限等级（数字越小权限越高）。"
+        },
+        {
+          "key": "TwitchBloodMoonAllowed",
+          "label": "血月允许 Twitch 事件",
+          "group": "Twitch 直播联动",
+          "type": "select",
+          "default": "false",
+          "options": [
+            "true",
+            "false"
+          ],
+          "desc": "血月期间是否允许 Twitch 观众互动事件。血月大量刷怪时叠加事件可能导致卡顿，默认关闭。"
+        }
+      ]
+    }
   ],
-  "backup_paths": ["Saves", "serverconfig.xml"],
-  "notes": "默认配置在 serverconfig.xml，首次启动后按需修改。"
+  "mod_manager": {
+    "dir": "Mods"
+  },
+  "backup_paths": [
+    "Saves",
+    "~/.local/share/7DaysToDie",
+    "serverconfig.xml",
+    "Mods",
+    "Mods.disabled",
+    "!Mods/*/Resources",
+    "!Mods/*/UIAtlases"
+  ],
+  "world_paths": [
+    "~/.local/share/7DaysToDie/Saves/{config:GameWorld}/{config:GameName}",
+    "~/.local/share/7DaysToDie/Saves/{config:WorldGenSeed}/{config:GameName}",
+    "Saves/{config:GameWorld}/{config:GameName}"
+  ],
+  "notes": "控制台命令经 telnet 管理口执行（面板自动开启 TelnetEnabled；TelnetPassword 建议留空=仅本机可连）。Mod 放入 Mods/ 目录（每个 mod 一个含 ModInfo.xml 的子目录，ModInfo.xml 需含 DisplayName 字段才被识别），面板「Mod 管理」页支持上传 zip、URL 直链与 NexusMods 在线安装；装完重启生效，客户端需安装同版本 mod 才能进入。0_TFP_*/TFP_* 开头的是游戏自带 mod，勿删。世界/存档在 ~/.local/share/7DaysToDie/Saves/<世界>/<GameName>/（V3.2，写到 games 家目录而非实例目录；旧版在实例目录 Saves/ 下），备份会一并打包；改 GameWorld/GameName/WorldGenSeed 等于开新存档。实例页「创建新世界」= 先自动备份再删当前世界存档重启生成（RWG 世界的存档目录名可能是种子名，两种候选都删，任务日志会列出实际删除的路径）。备份默认排除 mod 的客户端渲染资产（`!Mods/*/Resources`、`!Mods/*/UIAtlases`，否则武器类 mod 的 GB 级 unity3d 会撑爆备份盘）；需要全量迁移时在模板 backup_paths 里去掉这两条排除。"
 }

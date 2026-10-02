@@ -18,24 +18,36 @@ import (
 // ---------- 游戏模板：新增游戏只需加一个 JSON ----------
 
 type PortSpec struct {
-	Key     string `json:"key"`     // 实例 Ports 映射中的键，如 game / rcon / query
+	Key     string `json:"key"` // 实例 Ports 映射中的键，如 game / rcon / query
 	Default int    `json:"default"`
-	Proto   string `json:"proto"`   // udp | tcp
+	Proto   string `json:"proto"` // udp | tcp
 	Desc    string `json:"desc"`
-	Public  bool   `json:"public"`  // 是否需要对公网开放（防火墙提示用）
+	Public  bool   `json:"public"` // 是否需要对公网开放（防火墙提示用）
+}
+
+// FieldPreset 配置项的预设一键填充（如七日杀 SandboxCode 难度预设）
+type FieldPreset struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+	Note  string `json:"note,omitempty"`
 }
 
 type ConfigField struct {
-	Key     string   `json:"key"`
-	Label   string   `json:"label"`
-	Group   string   `json:"group,omitempty"` // 配置页分组标题（可折叠），空则归入「其他」
-	Type    string   `json:"type"` // string | password | int | float | bool | select
-	Default any      `json:"default,omitempty"`
-	Options []string `json:"options,omitempty"` // select
-	Min     *float64 `json:"min,omitempty"`     // int/float 输入约束（仅在有官方/可靠依据时填写）
-	Max     *float64 `json:"max,omitempty"`
-	Desc    string   `json:"desc,omitempty"`
-	Note    string   `json:"note,omitempty"` // 补充说明（已知问题/注意事项）
+	Key     string        `json:"key"`
+	Label   string        `json:"label"`
+	Group   string        `json:"group,omitempty"` // 配置页分组标题（可折叠），空则归入「其他」
+	Type    string        `json:"type"`            // string | password | int | float | bool | select
+	Default any           `json:"default,omitempty"`
+	Options []string      `json:"options,omitempty"` // select
+	Min     *float64      `json:"min,omitempty"`     // int/float 输入约束（仅在有官方/可靠依据时填写）
+	Max     *float64      `json:"max,omitempty"`
+	Desc    string        `json:"desc,omitempty"`
+	Note    string        `json:"note,omitempty"`    // 补充说明（已知问题/注意事项）
+	Presets []FieldPreset `json:"presets,omitempty"` // 预设一键填充按钮
+	// 非空时提供「解码当前值」按钮：在服务器上执行该命令（如七日杀 gso）并展示输出
+	DecodeCommand string `json:"decode_command,omitempty"`
+	// 非空时提供「沙盒选项编辑器」按钮（七日杀 SandboxCode）：值为选项表 ID（如 7dtd-v3.2）
+	SandboxOptions string `json:"sandbox_options,omitempty"`
 }
 
 type ConfigSpec struct {
@@ -47,14 +59,21 @@ type ConfigSpec struct {
 }
 
 type RCONSpec struct {
-	Type    string `json:"type"`     // source
-	PortKey string `json:"port_key"` // 对应 Ports 里的键
+	Type    string `json:"type"`     // source | telnet（telnet：七日杀等游戏的行式控制台）
+	PortKey string `json:"port_key"` // 对应 Ports 里的键（source 用）
+	// telnet 用：含 TelnetEnabled/TelnetPort/TelnetPassword 键的配置文件（相对实例目录）
+	ConfigPath string `json:"config_path,omitempty"`
+}
+
+// ModManagerSpec 文件夹式 Mod 管理（七日杀等：Mods/<目录>/ModInfo.xml）
+type ModManagerSpec struct {
+	Dir string `json:"dir"` // 相对实例目录的 mod 目录，如 Mods；禁用目录为 <dir>.disabled
 }
 
 // RESTCommandSpec 把一条控制台命令映射到游戏 REST API（部分游戏 RCON 丢响应，REST 更可靠）
 type RESTCommandSpec struct {
-	Method string            `json:"method"` // GET | POST
-	Path   string            `json:"path"`   // 如 /v1/api/players
+	Method string            `json:"method"`           // GET | POST
+	Path   string            `json:"path"`             // 如 /v1/api/players
 	Format string            `json:"format,omitempty"` // players | metrics | kv，空则原样返回 body
 	Body   map[string]string `json:"body,omitempty"`   // POST JSON body；值 "$arg" 会被命令参数替换
 }
@@ -72,26 +91,28 @@ type ConsoleButton struct {
 }
 
 type GameTemplate struct {
-	ID             string       `json:"id"`
-	Name           string       `json:"name"`
-	Description    string       `json:"description"`
-	SteamAppID     int          `json:"steam_app_id"`
-	AnonymousLogin bool         `json:"anonymous_login"`
-	Executable     string       `json:"executable"`      // 相对实例目录的启动命令
-	DefaultArgs    []string     `json:"default_args"`
-	StopMode       string       `json:"stop_mode"`       // rcon | sigterm
-	StopWarnSecs   int          `json:"stop_warn_secs"`  // rcon 停止前提前广播秒数
-	RCON           *RCONSpec    `json:"rcon,omitempty"`
-	RestAPI        *RESTSpec    `json:"rest_api,omitempty"` // 可选：部分命令改走游戏 REST API（RCON 丢响应的游戏用）
+	ID             string          `json:"id"`
+	Name           string          `json:"name"`
+	Description    string          `json:"description"`
+	SteamAppID     int             `json:"steam_app_id"`
+	AnonymousLogin bool            `json:"anonymous_login"`
+	Executable     string          `json:"executable"` // 相对实例目录的启动命令
+	DefaultArgs    []string        `json:"default_args"`
+	StopMode       string          `json:"stop_mode"`      // rcon | sigterm
+	StopWarnSecs   int             `json:"stop_warn_secs"` // rcon 停止前提前广播秒数
+	RCON           *RCONSpec       `json:"rcon,omitempty"`
+	RestAPI        *RESTSpec       `json:"rest_api,omitempty"`        // 可选：部分命令改走游戏 REST API（RCON 丢响应的游戏用）
 	ConsoleButtons []ConsoleButton `json:"console_buttons,omitempty"` // 可选：控制台快捷按钮，缺省用内置默认
-	Ports          []PortSpec   `json:"ports"`
-	Configs        []ConfigSpec `json:"configs,omitempty"`
-	BackupPaths    []string     `json:"backup_paths"`            // 相对实例目录
-	WorldPaths     []string     `json:"world_paths,omitempty"`   // 世界存档路径（相对实例目录，「创建新世界」时删除）
-	Notes          string       `json:"notes,omitempty"`
+	Ports          []PortSpec      `json:"ports"`
+	Configs        []ConfigSpec    `json:"configs,omitempty"`
+	ModManager     *ModManagerSpec `json:"mod_manager,omitempty"` // 可选：文件夹式 Mod 管理
+	BackupPaths    []string        `json:"backup_paths"`          // 见 pathspec.go：相对实例目录、~/(games 家目录)、{config:键}
+	WorldPaths     []string        `json:"world_paths,omitempty"` // 「创建新世界」时删除的世界存档路径（语法同 backup_paths，支持 {config:键} 定位当前世界）
+	Notes          string          `json:"notes,omitempty"`
 }
 
-func LoadTemplates(embedded embed.FS, userDir string) (map[string]*GameTemplate, error) {	out := map[string]*GameTemplate{}
+func LoadTemplates(embedded embed.FS, userDir string) (map[string]*GameTemplate, error) {
+	out := map[string]*GameTemplate{}
 
 	load := func(data []byte, src string) error {
 		var t GameTemplate
@@ -171,11 +192,22 @@ func validateTemplate(t *GameTemplate) error {
 		}
 	}
 	if t.RCON != nil {
-		if !seen[t.RCON.PortKey] {
-			return fmt.Errorf("rcon.port_key %q 未在 ports 中定义", t.RCON.PortKey)
+		switch t.RCON.Type {
+		case "source":
+			if !seen[t.RCON.PortKey] {
+				return fmt.Errorf("rcon.port_key %q 未在 ports 中定义", t.RCON.PortKey)
+			}
+		case "telnet":
+			if t.RCON.ConfigPath == "" || strings.Contains(t.RCON.ConfigPath, "..") {
+				return fmt.Errorf("rcon(telnet).config_path 需为合法配置文件路径")
+			}
+		default:
+			return fmt.Errorf("rcon.type 须为 source/telnet")
 		}
-		if t.RCON.Type != "source" {
-			return fmt.Errorf("暂只支持 source 类型 RCON")
+	}
+	if t.ModManager != nil {
+		if t.ModManager.Dir == "" || strings.Contains(t.ModManager.Dir, "/") || strings.Contains(t.ModManager.Dir, "..") {
+			return fmt.Errorf("mod_manager.dir 须为实例目录下的目录名（如 Mods）")
 		}
 	}
 	if t.RestAPI != nil {
@@ -201,9 +233,35 @@ func validateTemplate(t *GameTemplate) error {
 			return fmt.Errorf("配置路径非法: %q", c.Path)
 		}
 		switch c.Format {
-		case "option-settings", "kv", "raw":
+		case "option-settings", "kv", "xmlkv", "raw":
 		default:
 			return fmt.Errorf("配置 %s 的 format 须为 option-settings/kv/raw", c.Path)
+		}
+	}
+	for _, p := range t.BackupPaths {
+		if err := validatePathSpec(strings.TrimPrefix(p, "!")); err != nil { // "!" 前缀 = 排除模式
+			return fmt.Errorf("备份路径非法: %w", err)
+		}
+	}
+	for _, p := range t.WorldPaths {
+		if strings.HasPrefix(p, "!") {
+			return fmt.Errorf("world_paths 不支持 ! 排除模式: %q", p)
+		}
+		if err := validatePathSpec(p); err != nil {
+			return fmt.Errorf("世界存档路径非法: %w", err)
+		}
+	}
+	return nil
+}
+
+// findConfigSpecOf 在模板里按路径找配置声明
+func findConfigSpecOf(tmpl *GameTemplate, path string) *ConfigSpec {
+	if tmpl == nil {
+		return nil
+	}
+	for i := range tmpl.Configs {
+		if tmpl.Configs[i].Path == path {
+			return &tmpl.Configs[i]
 		}
 	}
 	return nil

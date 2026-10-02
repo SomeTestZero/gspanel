@@ -1,5 +1,5 @@
 -- GSPanel 扩展命令 mod（Palworld 原生 Linux，基于 ue4ss-linux / LD_PRELOAD）
--- 版本：2026-09-13.11
+-- 版本：2026-09-14.2
 --   功能：给物品 / 给经验 / 在线玩家索引 / 物品表导出
 --
 -- ★ 2026-09-13.11 崩溃根因修复 ★
@@ -13,14 +13,17 @@
 --   服务器不再死。诊断：probe throw / probe throwasync 可故意触发一次绑定层
 --   C++ throw，用于验证垫片在役。
 --
--- ★ 2026-09-13.8 修复（保留）★
---   1) 去掉一切“后台自动碰玩家对象”的行为（原来的 LoopAsync(10000) 每 10 秒
---      扫 FindAllOf + 读玩家属性；它会在玩家刚进服的瞬间读到半初始化的对象 → 崩）。
---      现在只在面板真的发命令时（whojson / give / giveexp）才现场刷新玩家索引。
---   2) 不再读 FGuid / FUniqueNetIdRepl 这些**结构体属性**（ps.PlayerUId / ps.UniqueId）：
---      结构体属性读取在本 build 不可靠。玩家只用名字匹配（面板下拉框里的值就是名字）。
---   3) 只调用确定存在的接口：ps:GetPlayerName()（返回 FString 包装，调 :ToString() 取字符串），
---      失败时回退读 PlayerName 属性。
+-- ★ 2026-09-14.1：Linux 布局 + 实际调用链修复 ★
+--   UObjectBase 双析构槽：ProcessEvent 应在 0x268（旧 0x260 是空 ret）。
+--   FProperty ArrayDim/ElementSize 应在 0x34/0x38（Linux 复用基类尾部 padding）。
+--   UFunction 是可调用 userdata，FName 参数必须显式 FName(id)，不能传字符串。
+--   玩家以 PlayerUId 为身份，每条命令现场刷新，只接受有连接的非 inactive PlayerState；
+--   不缓存 UObject、不用 玩家#序号/背包遍历索引、不对同名玩家猜测。
+--   AddItem_ServerInternal 只执行一次，检查 EPalItemOperationResult + 背包前后数量。
+--   布局未更新时 selftest 失败，所有玩家/写操作 fail closed。
+-- ★ 2026-09-14.2：框架 push_structproperty 不能依赖未初始化的 FStructProperty::StaticClass；
+--   改用运行时 cast flags 验证并防空。必须有 GSPanelPropertyBindingsVersion=1 才读 UID。
+--   详见 patches/ue4ss-linux-palworld-properties.patch；selftest 增加 CDO GUID 字段回归。
 --
 -- 说明：EngineTick 钩子在本 build 可用（ExecuteInGameThread 走它）；BeginPlay/
 -- 控制台命令等钩子不可用，所以命令入口走文件队列轮询，游戏对象操作投递到游戏线程。
@@ -34,8 +37,7 @@
 --   1) 控制台命令（RCON 或游戏内控制台）：give/giveexp/gspwho
 --   2) 文件队列（gspanel-mod/cmd.txt），面板用：give/giveexp/who/whojson/hello/items/probe
 local LOG = "[gspanel]"
-local MOD_VERSION = "2026-09-13.11"
-local unpack = table.unpack or unpack -- Lua 5.4 只提供 table.unpack；直接调全区 unpack 会抛错并导致 UE4SS abort
+local MOD_VERSION = "2026-09-14.2"
 local function log(fmt, ...)
   local ok, s = pcall(string.format, fmt, ...)
   print(LOG .. " " .. (ok and s or tostring(fmt)) .. "\n")
@@ -70,13 +72,14 @@ if type(EGameThreadMethod) == "table" then
 end
 step("gt method=" .. GT_NAME .. " EngineTick=" .. tostring(EngineTickAvailable) .. " ProcessEvent=" .. tostring(ProcessEventAvailable))
 
-local function runGT(name, fn)
+local function runGT(name, fn, onError)
   local ok, err = pcall(function()
     local function body()
       local ok2, err2 = pcall(fn)
       if not ok2 then
         step(name .. ": gt-error " .. tostring(err2))
         log("[gt] %s 出错: %s", name, tostring(err2))
+        if onError then onError(tostring(err2)) end
       end
     end
     if GT_METHOD ~= nil then
@@ -88,153 +91,177 @@ local function runGT(name, fn)
   if not ok then
     step(name .. ": dispatch-failed " .. tostring(err))
     log("[gt] 投递 %s 失败: %s", name, tostring(err))
+    if onError then onError(tostring(err)) end
   end
 end
 
--- ============ 玩家索引（只按名字） ============
-local players = {}   -- 小写名字 -> { obj=, name= }
+-- ============ 框架自检 / 在线玩家（只在命令的游戏线程内读取） ============
+local function valid(obj)
+  if obj == nil then return false end
+  local ok, v = pcall(function() return obj:IsValid() end)
+  return ok and v == true
+end
 
--- 读玩家名。GetPlayerName() 返回 UE4SS 的 FString 包装对象，
--- 要调 :ToString() 才是 Lua 字符串（tostring(包装) 只会给出地址）。
--- 把各种“字符串”表示转成 Lua 字符串
 local function toLuaString(v)
-  if v == nil then return nil, "nil" end
-  if type(v) == "string" then return v, "string" end
+  if type(v) == "string" then return v end
+  if v == nil then return nil end
   local ok, s = pcall(function() return v:ToString() end)
-  if ok and type(s) == "string" and s ~= "" then return s, "ToString" end
-  local okLen, n = pcall(function() return v:Len() end)
-  return nil, string.format("type=%s tostring_ok=%s len=%s", type(v), tostring(ok), tostring(okLen and n))
-end
-
--- 读玩家名：先用属性（wrapper 指向活着的属性内存），再用 GetPlayerName()
-local function readName(ps)
-  local okP, prop = pcall(function() return ps.PlayerName end)
-  if okP and prop ~= nil then
-    local s, how = toLuaString(prop)
-    if s then return s end
-    step("readName: PlayerName 属性读不出 " .. tostring(how))
-  else
-    step("readName: PlayerName 属性访问失败 ok=" .. tostring(okP) .. " v=" .. tostring(prop))
-  end
-  local okF, fn = pcall(function() return ps:GetPlayerName() end)
-  if okF and fn ~= nil then
-    local s2, how2 = toLuaString(fn)
-    if s2 then return s2 end
-    step("readName: GetPlayerName 读不出 " .. tostring(how2))
-  else
-    step("readName: GetPlayerName 调用失败 ok=" .. tostring(okF) .. " v=" .. tostring(fn))
-  end
+  if ok and type(s) == "string" then return s end
   return nil
 end
 
-local function indexPlayer(ps, idx)
-  if ps == nil then return nil end
-  local ok, valid = pcall(function() return ps:IsValid() end)
-  if not ok or valid == false then return nil end
-  local name = readName(ps)
-  local key
-  if name and name ~= "" then
-    key = name
-  else
-    -- 名字读不出来也不要丢：用 玩家#序号 当标识（面板可以按序号发命令）
-    key = "玩家#" .. tostring(idx or "?")
-  end
-  local info = { obj = ps, name = key, idx = idx }
-  players[string.lower(key)] = info
-  if name and name ~= "" and idx then
-    players["#" .. tostring(idx)] = info   -- 别名：#1
-  end
-  return info
+local function guidString(g)
+  if g == nil then return nil end
+  local ok, s = pcall(function()
+    local parts = {}
+    for _, k in ipairs({ "A", "B", "C", "D" }) do
+      local v = g[k]
+      if type(v) ~= "number" or v % 1 ~= 0 then error("无效 GUID 分量") end
+      parts[#parts+1] = string.format("%08X", v & 0xffffffff)
+    end
+    return table.concat(parts)
+  end)
+  if ok and s ~= string.rep("0", 32) then return s end
+  return nil
 end
 
--- 只在命令里调用（不后台轮询）
+-- 无玩家也能校验真正的 ProcessEvent 是否执行。旧布局只会返回空 FString。
+local function selftest()
+  if GSPanelPropertyBindingsVersion ~= 1 then
+    error("UE4SS 框架缺少结构体绑定修复；请先更新 libUE4SS.so 再重启（仅更新 Lua/布局不够）")
+  end
+  local lib = StaticFindObject("/Script/Engine.Default__KismetStringLibrary")
+  if not valid(lib) then error("UE4SS 自检失败：找不到 KismetStringLibrary；请等待游戏加载") end
+  local result = toLuaString(lib:Concat_StrStr("gspanel-", "process-event-ok"))
+  if result ~= "gspanel-process-event-ok" then
+    error("UE4SS 自检失败：ProcessEvent 没有正确执行。请更新扩展命令（含 Linux 布局表）并重启游戏")
+  end
+  if toLuaString(lib:Conv_NameToString(FName("Wood"))) ~= "Wood" then
+    error("UE4SS 自检失败：FName 参数转换异常")
+  end
+  local enum = StaticFindObject("/Script/Pal.EPalItemOperationResult")
+  if not valid(enum) or toLuaString(enum:GetNameByValue(0)) ~= "EPalItemOperationResult::Success" then
+    error("UE4SS 自检失败：UEnum 布局不兼容")
+  end
+  local ps = StaticFindObject("/Script/Pal.Default__PalPlayerState")
+  if not valid(ps) then error("PlayerState CDO 尚未加载") end
+  -- CDO 的 UID 允许全零，但四个字段必须可读；覆盖过去空服自检遗漏的崩溃路径。
+  local guid = ps.PlayerUId
+  for _, key in ipairs({"A", "B", "C", "D"}) do
+    if type(guid[key]) ~= "number" then error("PlayerUId 结构体绑定自检失败") end
+  end
+  return true, "ProcessEvent/FString/FName/UEnum/PlayerUId 自检通过"
+end
+
 local function refreshPlayers()
-  step("refreshPlayers: FindAllOf enter")
-  local ok, list = pcall(FindAllOf, "PalPlayerState")
-  if not ok or type(list) ~= "table" then
-    step("refreshPlayers: FindAllOf 失败 ok=" .. tostring(ok) .. " type=" .. type(list))
-    return 0
+  selftest()
+  local list = FindAllOf("PalPlayerState") or {}
+  local out = {}
+  for _, ps in ipairs(list) do
+    if valid(ps) and not ps:HasAnyFlags(0x10) then -- RF_ClassDefaultObject
+      local ok, info = pcall(function()
+        if ps.bIsInactive or ps.bIsABot then return nil end
+        local pc = ps.Owner
+        if not valid(pc) or not valid(pc.NetConnection) then return nil end
+        local uid = guidString(ps.PlayerUId)
+        if not uid then return nil end -- 登录未完成；不创建不稳定的序号标识
+        local name = toLuaString(ps.PlayerNamePrivate)
+        if not name or name == "" then name = toLuaString(ps:GetPlayerName()) end
+        if not name or name == "" then name = "未命名玩家 · " .. uid:sub(1,8) end
+        return { obj = ps, name = name, uid = uid }
+      end)
+      if not ok then error("读取在线玩家失败（拒绝使用不完整列表）：" .. tostring(info)) end
+      if info then out[#out+1] = info end
+    end
   end
-  local n = 0
-  for i, ps in ipairs(list) do
-    if indexPlayer(ps, i) then n = n + 1 end
-  end
-  step("refreshPlayers: scanned=" .. tostring(n))
-  return n
+  table.sort(out, function(a,b) return a.uid < b.uid end)
+  return out
 end
 
 local function findPlayer(who)
-  if who == nil or who == "" then return nil end
-  local info = players[string.lower(who)]
-  if info then return info end
-  refreshPlayers()
-  return players[string.lower(who)]
+  if type(who) ~= "string" or who == "" then return nil, "请指定玩家 UID 或完整名字" end
+  local matches = {}
+  local uid = who:gsub("-", ""):upper()
+  for _, info in ipairs(refreshPlayers()) do
+    if info.uid == uid or info.name:lower() == who:lower() then matches[#matches+1] = info end
+  end
+  if #matches == 1 then return matches[1] end
+  if #matches > 1 then return nil, "玩家名字不唯一，请从下拉框选择 UID" end
+  return nil, "玩家不在线或尚未加载完成：" .. who .. "（请刷新玩家列表）"
 end
 
 -- ============ 业务动作 ============
--- 给物品：1.0.4 里不同版本的接口名不同，按候选列表依次尝试，全部包 pcall。
-local function callInvMethod(inv, method, ...)
-  local args = { ... } -- Lua 不允许在嵌套函数里用 ...，先捕获
-  local f = inv[method]
-  if type(f) ~= "function" then return false, method .. " 不可用" end
-  local ok, res = pcall(function() return f(inv, unpack(args)) end)
-  if ok then return true, method .. " => " .. tostring(res) end
-  local ok2, res2 = pcall(function() return f(unpack(args)) end)
-  if ok2 then return true, method .. " => " .. tostring(res2) end
-  return false, method .. " 调用失败: " .. tostring(res)
+local MAX_GIVE_COUNT = 10000
+local function positiveInteger(v, max)
+  return type(v) == "number" and v == v and v % 1 == 0 and v >= 1 and v <= max
 end
 
 local function getInventory(info)
-  if info == nil or info.obj == nil then return nil, "玩家对象为空" end
-  local ok, inv = pcall(function() return info.obj:GetInventoryData() end)
-  step("getInventory: GetInventoryData ok=" .. tostring(ok) .. " type=" .. type(inv) .. " v=" .. tostring(inv))
-  if not ok then return nil, "GetInventoryData 出错: " .. tostring(inv) end
-  if inv == nil then return nil, "GetInventoryData 返回空" end
+  local inv = info.obj:GetInventoryData()
+  if not valid(inv) then return nil, "玩家背包尚未初始化，请等待进入世界后重试" end
+  if guidString(inv.OwnerPlayerUId) ~= info.uid then
+    return nil, "背包所有者与目标玩家 UID 不一致，已拒绝操作"
+  end
   return inv
 end
 
+local function itemCount(inv, id)
+  local n = inv:CountItemNum(id)
+  if type(n) ~= "number" or n % 1 ~= 0 or n < 0 then error("背包数量读取异常") end
+  return n
+end
+
+local itemResultLabels = {
+  [1] = "未执行任何操作", [3] = "背包不存在", [4] = "背包槽位已满",
+  [5] = "背包槽位不足", [6] = "物品堆叠溢出", [7] = "找不到物品容器",
+  [11] = "无法创建动态物品", [13] = "找不到物品容器", [15] = "物品 ID 不存在",
+  [16] = "背包空间不足", [26] = "权限不足", [27] = "该物品不允许放入背包",
+  [28] = "容器不可操作", [29] = "操作受限", [31] = "背包事务锁定", [32] = "找不到物品表记录",
+}
+
 local function giveItem(info, itemId, count)
+  if type(itemId) ~= "string" or not itemId:match("^[%w_%-]+$") or #itemId > 128 then
+    return false, "物品 ID 格式不正确"
+  end
+  if not positiveInteger(count, MAX_GIVE_COUNT) then return false, "数量必须是 1～10000 的整数" end
   local inv, err = getInventory(info)
   if not inv then return false, err end
-  local errs = {}
-  local candidates = {
-    { "RequestAddItem", { itemId, count, true } },
-    { "RequestAddItem_ToServer", { itemId, count, true } },
-    { "RequestAddItem_ForDebug", { itemId, count, true } },
-    { "AddItem_ServerInternal", { itemId, count, false, 0.0, true } },
-  }
-  for _, c in ipairs(candidates) do
-    local ok, msg = callInvMethod(inv, c[1], unpack(c[2]))
-    step("giveItem: " .. c[1] .. " ok=" .. tostring(ok) .. " " .. tostring(msg))
-    if ok then return true, string.format("%s x%d: %s", itemId, count, msg) end
-    errs[#errs+1] = msg
+  -- Lua string 不是 FName userdata：直接传字符串会在绑定层 reinterpret_cast 后 SEGV。
+  local id = FName(itemId)
+  local before = itemCount(inv, id)
+  -- 必须走一次确定签名的服务端同步接口，绝不试多个候选/重复调用。
+  local called, result = pcall(function() return inv:AddItem_ServerInternal(id, count, false, 0.0, true) end)
+  local counted, after = pcall(itemCount, inv, id)
+  step(string.format("give uid=%s item=%s count=%d before=%d after=%s result=%s", info.uid, itemId, count, before, tostring(after), tostring(result)))
+  if not called then
+    return false, "给物品调用异常，结果不确定，请先检查背包，不要直接重试：" .. tostring(result)
   end
-  return false, "全部候选接口失败: " .. table.concat(errs, " | ")
+  if not counted then return false, "已执行给物品，但无法核验到账数量，请检查背包，不要直接重试：" .. tostring(after) end
+  local delta = after - before
+  if result ~= 0 or delta ~= count then
+    return false, string.format("未完整到账：%s（返回码 %s）；背包 %d → %d，实际增加 %d/%d。请先核对背包，勿重复发放。",
+      itemResultLabels[result] or (result == 0 and "数量不符" or "游戏拒绝或未知结果"), tostring(result), before, after, delta, count)
+  end
+  return true, string.format("已给 %s（%s）%s ×%d；背包 %d → %d（已核验）", info.name, info.uid, itemId, count, before, after)
 end
 
 local function giveExp(info, amount)
+  if not positiveInteger(amount, 10000000) then return false, "经验必须是 1～10000000 的整数" end
   local ok, r = pcall(function() return info.obj:AddExp_ServerInternal(amount, false, true, 1.0) end)
-  step("giveExp: ok=" .. tostring(ok) .. " r=" .. tostring(r))
-  if ok then return true, "AddExp_ServerInternal => " .. tostring(r) end
+  if ok then return true, "经验请求已执行（未核验经验增量）：" .. tostring(r) end
   return false, "给经验失败: " .. tostring(r)
 end
 
 local function doGive(who, itemId, count)
-  local info = findPlayer(who)
-  if not info then return false, "玩家不在线: " .. tostring(who) end
+  local info, err = findPlayer(who)
+  if not info then return false, err end
   return giveItem(info, itemId, count)
 end
 
 local function listPlayers()
-  refreshPlayers()
-  local seen, out = {}, {}
-  for _, info in pairs(players) do
-    if info.name and not seen[info.name] then
-      seen[info.name] = true
-      out[#out+1] = info.name
-    end
-  end
-  if #out == 0 then return "当前没有索引到在线玩家" end
+  local out = {}
+  for _, info in ipairs(refreshPlayers()) do out[#out+1] = info.name .. " · " .. info.uid end
+  if #out == 0 then return "当前没有已加载完成的在线玩家" end
   return table.concat(out, "\n")
 end
 
@@ -247,16 +274,11 @@ local function jsonStr(s)
   return "\"" .. s .. "\""
 end
 
--- 在线玩家结构化输出（面板下拉框用）。uid/steam 读结构体属性会让本 build 崩，
--- 所以只给名字（面板会退化成用名字匹配）。
+-- UID 来源于当前连接的 PlayerState，不按 REST/FindAllOf 的数组顺序拼接身份。
 local function playersJSON()
-  refreshPlayers()
-  local seen, out = {}, {}
-  for _, info in pairs(players) do
-    if info.name and info.name ~= "" and not seen[info.name] then
-      seen[info.name] = true
-      out[#out+1] = string.format("{\"name\":%s,\"uid\":\"\",\"steam\":\"\"}", jsonStr(info.name))
-    end
+  local out = {}
+  for _, info in ipairs(refreshPlayers()) do
+    out[#out+1] = string.format("{\"name\":%s,\"uid\":%s,\"steam\":\"\"}", jsonStr(info.name), jsonStr(info.uid))
   end
   return true, "[" .. table.concat(out, ",") .. "]"
 end
@@ -335,38 +357,44 @@ local function probe(sub, lines)
     return true, "survived binding throw: " .. probeThrow()
   elseif sub == "gt" then
     return true, "已投递自检任务（看 steps.log 是否有 gt-selftest 行）"
-  elseif sub == "names" then
-    local ok, list = pcall(FindAllOf, "PalPlayerState")
-    if not ok or type(list) ~= "table" then return false, "FindAllOf 失败 ok=" .. tostring(ok) .. " type=" .. type(list) end
-    local out = {}
-    for i, ps in ipairs(list) do
-      local o = {}
-      o[#o+1] = string.format("#%d IsValid=%s", i, tostring(select(2, pcall(function() return ps:IsValid() end))))
-      o[#o+1] = "  full=" .. tostring(select(2, pcall(function() return ps:GetFullName() end)))
-      o[#o+1] = "  class=" .. tostring(select(2, pcall(function() return ps:GetClass():GetFullName() end)))
-      local prop = select(2, pcall(function() return ps.PlayerName end))
-      o[#o+1] = "  PlayerName type=" .. type(prop) .. " len=" .. tostring(select(2, pcall(function() return prop:Len() end)))
-        .. " ToString=" .. tostring(select(2, pcall(function() return prop:ToString() end)))
-      local fn = select(2, pcall(function() return ps:GetPlayerName() end))
-      o[#o+1] = "  GetPlayerName type=" .. type(fn) .. " len=" .. tostring(select(2, pcall(function() return fn:Len() end)))
-        .. " ToString=" .. tostring(select(2, pcall(function() return fn:ToString() end)))
-      o[#o+1] = "  PlayerId=" .. tostring(select(2, pcall(function() return ps.PlayerId end)))
-      o[#o+1] = "  PlayerUId type=" .. type(select(2, pcall(function() return ps.PlayerUId end)))
-      out[#out+1] = table.concat(o, "\n")
-    end
-    return true, table.concat(out, "\n")
-  elseif sub == "who" then
+  elseif sub == "selftest" then
+    return selftest()
+  elseif sub == "playercheck" then
+    -- 无在线玩家也能覆盖 PlayerState 的只读属性绑定（使用 CDO，绝不做写操作）。
+    selftest()
+    local ps = StaticFindObject("/Script/Pal.Default__PalPlayerState")
+    if not valid(ps) then return false, "PlayerState CDO 不存在" end
+    step("playercheck: flags")
+    local flags = ps:HasAnyFlags(0x10)
+    step("playercheck: bool")
+    local inactive = ps.bIsInactive
+    local bot = ps.bIsABot
+    step("playercheck: owner")
+    local owner = ps.Owner
+    step("playercheck: guid")
+    local guid = guidString(ps.PlayerUId)
+    step("playercheck: name")
+    local name = toLuaString(ps.PlayerNamePrivate)
+    step("playercheck: done")
+    return true, string.format("CDO=%s inactive=%s bot=%s owner=%s uid=%s name=%s", tostring(flags), tostring(inactive), tostring(bot), tostring(valid(owner)), tostring(guid), tostring(name))
+  elseif sub == "inventorycheck" then
+    -- 背包接口需要有效世界，绝不能调用 Default__PalPlayerInventoryData（游戏会 fatal）。
+    local info, err = findPlayer(lines[3])
+    if not info then return false, err end
+    local inv, invErr = getInventory(info)
+    if not inv then return false, invErr end
+    local kind = inv:GetInventoryTypeFromStaticItemID(FName("Wood"))
+    local count = itemCount(inv, FName("Wood"))
+    return true, "uid=" .. info.uid .. " Wood kind=" .. tostring(kind) .. " count=" .. tostring(count)
+  elseif sub == "names" or sub == "who" then
     return true, listPlayers()
   elseif sub == "inv" then
-    local info
-    if lines[2] and lines[2] ~= "" then info = findPlayer(lines[2]) else
-      refreshPlayers()
-      for _, v in pairs(players) do info = v break end
-    end
-    if not info then return false, "没有在线玩家" end
-    local inv, err = getInventory(info)
-    if not inv then return false, tostring(err) end
-    return true, "inv=" .. tostring(inv)
+    local info, err = findPlayer(lines[3])
+    if not info then return false, err end
+    local inv, invErr = getInventory(info)
+    if not inv then return false, invErr end
+    local count = itemCount(inv, FName("Wood"))
+    return true, "uid=" .. info.uid .. " Wood=" .. tostring(count)
   end
   return false, "未知 probe: " .. tostring(sub)
 end
@@ -374,17 +402,17 @@ end
 -- ============ 命令分发 ============
 local function dispatch(verb, lines)
   if verb == "give" then
-    return doGive(lines[2], lines[3], tonumber(lines[4]) or 1)
+    return doGive(lines[2], lines[3], tonumber(lines[4]))
   elseif verb == "giveexp" then
-    local info = findPlayer(lines[2])
-    if info then return giveExp(info, tonumber(lines[3]) or 0) end
-    return false, "玩家不在线: " .. tostring(lines[2])
+    local info, err = findPlayer(lines[2])
+    if info then return giveExp(info, tonumber(lines[3])) end
+    return false, err
   elseif verb == "who" then
     return true, listPlayers()
   elseif verb == "whojson" then
     return playersJSON()
   elseif verb == "hello" then
-    return true, string.format("{\"version\":%s,\"verbs\":[\"give\",\"giveexp\",\"who\",\"whojson\",\"hello\",\"items\",\"probe\"]}", jsonStr(MOD_VERSION))
+    return true, string.format("{\"version\":%s,\"protocol\":2,\"verbs\":[\"give\",\"giveexp\",\"who\",\"whojson\",\"hello\",\"items\",\"probe\"]}", jsonStr(MOD_VERSION))
   elseif verb == "items" then
     return dumpItems()
   elseif verb == "probe" then
@@ -408,7 +436,7 @@ local function handle(cmd, args, Ar)
     return true
   elseif cmd == "give" then
     if #args < 3 then reply(Ar, "用法: give <玩家名> <物品ID> <数量>") return true end
-    local ok, msg = doGive(args[1], args[2], tonumber(args[3]) or 1)
+    local ok, msg = doGive(args[1], args[2], tonumber(args[3]))
     reply(Ar, (ok and "OK: " or "失败: ") .. msg)
     return true
   elseif cmd == "giveexp" then
@@ -449,16 +477,17 @@ local RES_FILE = "gspanel-mod/res.txt"
 
 local function splitLines(s)
   local t = {}
-  for line in tostring(s):gmatch("[^\r\n]+") do t[#t+1] = line end
+  for line in tostring(s):gmatch("([^\n]*)\n") do t[#t+1] = line:gsub("\r$", "") end
   return t
 end
 
-local function writeResult(ok, msg)
-  local of = io.open(RES_FILE, "w")
-  if of then
-    of:write(ok and "OK" or "FAIL", "\n", tostring(msg), "\n")
-    of:close()
-  end
+local function writeResult(ok, msg, requestId)
+  local of = io.open(RES_FILE .. ".tmp", "w")
+  if not of then error("无法写入响应") end
+  if requestId then of:write("gsp2:", requestId, "\n") end
+  of:write(ok and "OK" or "FAIL", "\n", tostring(msg), "\n")
+  of:close()
+  assert(os.rename(RES_FILE .. ".tmp", RES_FILE))
 end
 
 pcall(function()
@@ -471,12 +500,15 @@ pcall(function()
         f:close()
         os.remove(CMD_FILE)
         local lines = splitLines(content)
+        local requestId = lines[1] and lines[1]:match("^gsp2:([%w%-]+)$")
+        if requestId then table.remove(lines, 1) end
         local verb = lines[1]
+        local function respond(ok, msg) writeResult(ok, msg, requestId) end
         step("queue: cmd=" .. tostring(verb))
         if verb == "probe" and (lines[2] == "env" or lines[2] == "throwasync") then
           -- 只读 Lua 全局 / 纯 async 线程探针，不需要游戏线程
           local ok, msg = dispatch(verb, lines)
-          writeResult(ok, msg)
+          respond(ok, msg)
           log("cmd %s -> %s: %s", tostring(verb), ok and "OK" or "FAIL", tostring(msg))
         else
           runGT("cmd:" .. tostring(verb), function()
@@ -484,9 +516,9 @@ pcall(function()
               step("gt-selftest: 在游戏线程执行成功")
             end
             local ok, msg = dispatch(verb, lines)
-            writeResult(ok, msg)
+            respond(ok, msg)
             log("cmd %s -> %s: %s", tostring(verb), ok and "OK" or "FAIL", tostring(msg))
-          end)
+          end, function(err) respond(false, "命令异常：" .. err) end)
         end
       end
     end)
@@ -502,7 +534,10 @@ end)
 -- 简单自检文件，确认 Lua 有文件写权限
 local f = io.open("gspanel-mod/mod-alive.txt", "w")
 if f then
-  f:write(os.date("%Y-%m-%d %H:%M:%S"), " " .. MOD_VERSION, "\n")
+  local stat = io.open("/proc/self/stat", "r")
+  local pid = stat and (stat:read("*l") or ""):match("^(%d+)") or "0"
+  if stat then stat:close() end
+  f:write(os.date("%Y-%m-%d %H:%M:%S"), " " .. MOD_VERSION, " pid=", pid, "\n")
   f:close()
   log("mod-alive.txt written")
 else

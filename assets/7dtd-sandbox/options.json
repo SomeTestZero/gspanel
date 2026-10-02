@@ -1,0 +1,6723 @@
+{
+ "id": "7dtd-v3.2",
+ "source": "Assembly-CSharp.dll sha256:3737eedc9f143d42",
+ "option_count": 165,
+ "categories": [
+  {
+   "key": "General",
+   "label": "玩家"
+  },
+  {
+   "key": "Entities",
+   "label": "实体"
+  },
+  {
+   "key": "Crafting",
+   "label": "制作"
+  },
+  {
+   "key": "World",
+   "label": "世界"
+  },
+  {
+   "key": "Resources",
+   "label": "资源"
+  },
+  {
+   "key": "Traders",
+   "label": "商人"
+  },
+  {
+   "key": "Tasks",
+   "label": "任务"
+  },
+  {
+   "key": "Misc",
+   "label": "其他"
+  }
+ ],
+ "options": [
+  {
+   "id": 0,
+   "name": "RangedDamage",
+   "label": "远程伤害",
+   "desc": "玩家使用弓箭、火器和其他远程武器造成的伤害。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 2.5,
+     "label": "250%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 1,
+   "name": "MeleeDamage",
+   "label": "近战伤害",
+   "desc": "玩家使用近战武器和工具造成的伤害。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 2.5,
+     "label": "250%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 2,
+   "name": "BlockDamage",
+   "label": "物块伤害",
+   "desc": "玩家对物块造成的伤害量。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 2.5,
+     "label": "250%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 3,
+   "name": "TerrainDamage",
+   "label": "地形伤害",
+   "desc": "玩家对地形造成的伤害量。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 2.5,
+     "label": "250%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 4,
+   "name": "HeadshotMultiplier",
+   "label": "爆头倍数",
+   "desc": "玩家爆头实体所造成伤害的倍数。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 2.5,
+     "label": "250%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 5,
+   "name": "CrouchSpeed",
+   "label": "蹲伏速度",
+   "desc": "调整玩家蹲伏行走时的移动速度。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6000000238418579,
+     "label": "60%"
+    },
+    {
+     "raw": 0.699999988079071,
+     "label": "70%"
+    },
+    {
+     "raw": 0.800000011920929,
+     "label": "80%"
+    },
+    {
+     "raw": 0.8999999761581421,
+     "label": "90%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.100000023841858,
+     "label": "110%"
+    },
+    {
+     "raw": 1.2000000476837158,
+     "label": "120%"
+    },
+    {
+     "raw": 1.2999999523162842,
+     "label": "130%"
+    },
+    {
+     "raw": 1.399999976158142,
+     "label": "140%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 6,
+   "name": "WalkSpeed",
+   "label": "行走速度",
+   "desc": "调整玩家行走时的移动速度。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6000000238418579,
+     "label": "60%"
+    },
+    {
+     "raw": 0.699999988079071,
+     "label": "70%"
+    },
+    {
+     "raw": 0.800000011920929,
+     "label": "80%"
+    },
+    {
+     "raw": 0.8999999761581421,
+     "label": "90%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.100000023841858,
+     "label": "110%"
+    },
+    {
+     "raw": 1.2000000476837158,
+     "label": "120%"
+    },
+    {
+     "raw": 1.2999999523162842,
+     "label": "130%"
+    },
+    {
+     "raw": 1.399999976158142,
+     "label": "140%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 6
+  },
+  {
+   "id": 7,
+   "name": "RunSpeed",
+   "label": "奔跑速度",
+   "desc": "调整玩家奔跑时的移动速度。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6000000238418579,
+     "label": "60%"
+    },
+    {
+     "raw": 0.699999988079071,
+     "label": "70%"
+    },
+    {
+     "raw": 0.800000011920929,
+     "label": "80%"
+    },
+    {
+     "raw": 0.8999999761581421,
+     "label": "90%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.100000023841858,
+     "label": "110%"
+    },
+    {
+     "raw": 1.2000000476837158,
+     "label": "120%"
+    },
+    {
+     "raw": 1.2999999523162842,
+     "label": "130%"
+    },
+    {
+     "raw": 1.399999976158142,
+     "label": "140%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 8,
+   "name": "JumpStrength",
+   "label": "跳跃力量",
+   "desc": "修改玩家的跳跃高度。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 2
+  },
+  {
+   "id": 9,
+   "name": "StaminaUsage",
+   "label": "体力值消耗",
+   "desc": "奔跑、跳跃和攻击等动作的体力消耗。数值为近似值。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 1.75,
+     "label": "175%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    }
+   ],
+   "default": 4
+  },
+  {
+   "id": 10,
+   "name": "StaminaRegen",
+   "label": "体力值回复",
+   "desc": "控制体力回复的速率。数值为近似值。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 3
+  },
+  {
+   "id": 11,
+   "name": "PlayerLevelBonusApplied",
+   "label": "等级属性加成",
+   "desc": "决定生命值和体力值是否每级增加。",
+   "category": "General",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 12,
+   "name": "JarRefund",
+   "label": "罐子退款",
+   "desc": "消耗物品后归还罐子的几率。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.05000000074505806,
+     "label": "5%"
+    },
+    {
+     "raw": 0.10000000149011612,
+     "label": "10%"
+    },
+    {
+     "raw": 0.20000000298023224,
+     "label": "20%"
+    },
+    {
+     "raw": 0.30000001192092896,
+     "label": "30%"
+    },
+    {
+     "raw": 0.4000000059604645,
+     "label": "40%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6000000238418579,
+     "label": "60%"
+    },
+    {
+     "raw": 0.699999988079071,
+     "label": "70%"
+    },
+    {
+     "raw": 0.800000011920929,
+     "label": "80%"
+    },
+    {
+     "raw": 0.8999999761581421,
+     "label": "90%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 13,
+   "name": "ShowHealthBars",
+   "label": "实体生命值条",
+   "desc": "显示或隐藏实体的生命值条。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 14,
+   "name": "ShowEnemyDamage",
+   "label": "显示实体伤害",
+   "desc": "当实体被击中时显示浮动的伤害数字。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 15,
+   "name": "NewbieCoat",
+   "label": "新玩家增益",
+   "desc": "如果开启，新玩家出生时将获得新手保护增益。",
+   "category": "General",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 16,
+   "name": "HeadshotMode",
+   "label": "爆头模式",
+   "desc": "设置爆头伤害的规则。\\n\\n仅限爆头 = 只有爆头才能对敌人造成伤害。\\n爆头终结 = 射击身体可以造成伤害，但只有爆头才能终结敌人。\\n\\n对野生动物不生效。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": 0,
+     "label": "无"
+    },
+    {
+     "raw": 1,
+     "label": "仅限爆头"
+    },
+    {
+     "raw": 2,
+     "label": "爆头终结"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 17,
+   "name": "IncomingDamage",
+   "label": "玩家所受伤害",
+   "desc": "玩家受到所有来源的伤害量。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 2.5,
+     "label": "250%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 18,
+   "name": "XPMultiplier",
+   "label": "经验值倍数",
+   "desc": "作用于所有获得的经验值的倍数。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 1.75,
+     "label": "175%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 5.0,
+     "label": "500%"
+    }
+   ],
+   "default": 4
+  },
+  {
+   "id": 19,
+   "name": "ShowXP",
+   "label": "显示经验值",
+   "desc": "隐藏或显示屏幕上的经验值条和经验值弹出提示。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0,
+     "label": "所有"
+    },
+    {
+     "raw": 1,
+     "label": "仅显示条"
+    },
+    {
+     "raw": 2,
+     "label": "仅通知"
+    },
+    {
+     "raw": 3,
+     "label": "无"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 20,
+   "name": "EncumbranceModifier",
+   "label": "负重栏位",
+   "desc": "控制负重背包栏位的数量。可选择“无负重”至“满负重”。默认读取配置文件参数。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 10.0,
+     "label": "关闭"
+    },
+    {
+     "raw": 1.350000023841858,
+     "label": "低"
+    },
+    {
+     "raw": 1.0,
+     "label": "默认"
+    },
+    {
+     "raw": 0.699999988079071,
+     "label": "高"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "非常高"
+    },
+    {
+     "raw": 0.0,
+     "label": "完整"
+    }
+   ],
+   "default": 2
+  },
+  {
+   "id": 21,
+   "name": "ItemDegradation",
+   "label": "物品损坏",
+   "desc": "武器和工具耐久度下降的速度。默认读取配置文件参数。",
+   "category": "Crafting",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "关闭"
+    },
+    {
+     "raw": 0.25,
+     "label": "非常低"
+    },
+    {
+     "raw": 0.5,
+     "label": "低"
+    },
+    {
+     "raw": 1.0,
+     "label": "默认"
+    },
+    {
+     "raw": 1.5,
+     "label": "高"
+    },
+    {
+     "raw": 2.0,
+     "label": "非常高"
+    }
+   ],
+   "default": 3
+  },
+  {
+   "id": 22,
+   "name": "LoseItemsOnDeathType",
+   "label": "死亡时丢失",
+   "desc": "设置哪些物品在死亡时会丢失。\\n\\n无 = 无物品\\n全部 = 所有物品。\\n工具带 = 仅工具带上的物品。\\n背包 = 仅背包里的物品。\\n装备 = 穿戴的护甲和衣物。\\n仅携带物品 = 工具带和背包中的物品。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0,
+     "label": "无"
+    },
+    {
+     "raw": 1,
+     "label": "所有"
+    },
+    {
+     "raw": 2,
+     "label": "仅工具带"
+    },
+    {
+     "raw": 3,
+     "label": "仅背包"
+    },
+    {
+     "raw": 4,
+     "label": "设备"
+    },
+    {
+     "raw": 5,
+     "label": "仅携带的"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 23,
+   "name": "LoseItemsOnDeathCount",
+   "label": "死亡丢失数量",
+   "desc": "设置死亡时随机物品丢失的数量。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 1,
+     "label": "1-3"
+    },
+    {
+     "raw": 2,
+     "label": "1-5"
+    },
+    {
+     "raw": 3,
+     "label": "1-10"
+    },
+    {
+     "raw": 4,
+     "label": "1-20"
+    },
+    {
+     "raw": 5,
+     "label": "3-5"
+    },
+    {
+     "raw": 6,
+     "label": "5-7"
+    },
+    {
+     "raw": 7,
+     "label": "5-10"
+    },
+    {
+     "raw": 8,
+     "label": "7-10"
+    },
+    {
+     "raw": 9,
+     "label": "10-15"
+    },
+    {
+     "raw": 10,
+     "label": "15-20"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 24,
+   "name": "DegradeItemsOnDeath",
+   "label": "死亡损耗",
+   "desc": "设置角色死亡时物品是否会发生损耗。\\n\\n无 = 没有损失。\\n耐久度 = 当前耐久度降低一部分，可通过修理恢复。\\n最大耐久度 = 减少最大耐久度，降低修理的上限。\\n两者 = 物品同时损失当前和最大耐久度。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0,
+     "label": "无"
+    },
+    {
+     "raw": 1,
+     "label": "耐久度"
+    },
+    {
+     "raw": 2,
+     "label": "最大耐久度"
+    },
+    {
+     "raw": 3,
+     "label": "均可"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 25,
+   "name": "DegradeAmountOnDeath",
+   "label": "死亡损耗量",
+   "desc": "当启用死亡损耗时，此项设置决定死亡时耐久度损失的百分比。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.05000000074505806,
+     "label": "5%"
+    },
+    {
+     "raw": 0.10000000149011612,
+     "label": "10%"
+    },
+    {
+     "raw": 0.15000000596046448,
+     "label": "15%"
+    },
+    {
+     "raw": 0.20000000298023224,
+     "label": "20%"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    }
+   ],
+   "default": 2
+  },
+  {
+   "id": 26,
+   "name": "DeathPenalty",
+   "label": "死亡惩罚",
+   "desc": "决定死亡时的死亡惩罚。\\n\\n无 = 没有惩罚。\\n仅经验值 = 典型的经验值损失模式。\\n受伤 = 复活后会保留一些减益效果，并且食物/水会重置为 50%。\\n永久死亡 = 角色重置。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0,
+     "label": "无"
+    },
+    {
+     "raw": 1,
+     "label": "仅经验值"
+    },
+    {
+     "raw": 2,
+     "label": "受伤"
+    },
+    {
+     "raw": 3,
+     "label": "永久死亡"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 27,
+   "name": "DropOnDeath",
+   "label": "死亡丢失物品",
+   "desc": "决定死亡时掉落哪些物品。\\n\\n无 = 不掉落任何物品。\\n全部 = 掉落背包和工具带中的物品。\\n仅工具带 = 掉落工具带中的物品。\\n仅背包 = 掉落背包中的物品。\\n全部删除 = 删除所有物品。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0,
+     "label": "无"
+    },
+    {
+     "raw": 1,
+     "label": "所有"
+    },
+    {
+     "raw": 2,
+     "label": "仅工具带"
+    },
+    {
+     "raw": 3,
+     "label": "仅背包"
+    },
+    {
+     "raw": 4,
+     "label": "设备"
+    },
+    {
+     "raw": 5,
+     "label": "仅携带的"
+    },
+    {
+     "raw": 6,
+     "label": "删除所有"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 28,
+   "name": "DropOnQuit",
+   "label": "退出丢失物品",
+   "desc": "退出时会掉落什么物品。\\n\\n无 = 不掉落任何物品。\\n所有 = 掉落背包和工具带。\\n工具带 = 掉落工具带上的物品。\\n背包 = 掉落背包里的物品。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0,
+     "label": "无"
+    },
+    {
+     "raw": 1,
+     "label": "所有"
+    },
+    {
+     "raw": 2,
+     "label": "仅工具带"
+    },
+    {
+     "raw": 3,
+     "label": "仅背包"
+    },
+    {
+     "raw": 4,
+     "label": "设备"
+    },
+    {
+     "raw": 5,
+     "label": "仅携带的"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 29,
+   "name": "InfectionRate",
+   "label": "感染速率",
+   "desc": "调整感染进展的速度。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 4
+  },
+  {
+   "id": 30,
+   "name": "EnemySpawnMode",
+   "label": "敌人生成",
+   "desc": "启用或禁用敌人生成。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 31,
+   "name": "EntityDamage",
+   "label": "敌人造成的伤害",
+   "desc": "控制敌人对玩家造成的伤害量。这会与玩家受到的其他伤害叠加。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 2.5,
+     "label": "250%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 32,
+   "name": "BlockDamageAI",
+   "label": "敌人物块伤害",
+   "desc": "敌人对物块造成的伤害量。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 2.5,
+     "label": "250%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 33,
+   "name": "BlockDamageAIBM",
+   "label": "血月物块伤害",
+   "desc": "血月期间敌人对物块造成的伤害量。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 2.5,
+     "label": "250%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 34,
+   "name": "ZombieMove",
+   "label": "丧尸白天速度",
+   "desc": "设置白天普通丧尸的移动速度，不影响凶残丧尸与特殊丧尸。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": 0,
+     "label": "行走"
+    },
+    {
+     "raw": 1,
+     "label": "慢跑"
+    },
+    {
+     "raw": 2,
+     "label": "奔跑"
+    },
+    {
+     "raw": 3,
+     "label": "冲刺"
+    },
+    {
+     "raw": 4,
+     "label": "噩梦"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 35,
+   "name": "ZombieMoveNight",
+   "label": "丧尸夜间速度",
+   "desc": "设置夜晚普通丧尸的移动速度，不影响凶残丧尸与特殊丧尸。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": 0,
+     "label": "行走"
+    },
+    {
+     "raw": 1,
+     "label": "慢跑"
+    },
+    {
+     "raw": 2,
+     "label": "奔跑"
+    },
+    {
+     "raw": 3,
+     "label": "冲刺"
+    },
+    {
+     "raw": 4,
+     "label": "噩梦"
+    }
+   ],
+   "default": 3
+  },
+  {
+   "id": 36,
+   "name": "ZombieFeralMove",
+   "label": "凶残丧尸速度",
+   "desc": "设置凶残丧尸的移动速度。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": 0,
+     "label": "行走"
+    },
+    {
+     "raw": 1,
+     "label": "慢跑"
+    },
+    {
+     "raw": 2,
+     "label": "奔跑"
+    },
+    {
+     "raw": 3,
+     "label": "冲刺"
+    },
+    {
+     "raw": 4,
+     "label": "噩梦"
+    }
+   ],
+   "default": 3
+  },
+  {
+   "id": 37,
+   "name": "ZombieBMMove",
+   "label": "丧尸血月速度",
+   "desc": "控制血月尸群和风暴期间丧尸的移动速度。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": 0,
+     "label": "行走"
+    },
+    {
+     "raw": 1,
+     "label": "慢跑"
+    },
+    {
+     "raw": 2,
+     "label": "奔跑"
+    },
+    {
+     "raw": 3,
+     "label": "冲刺"
+    },
+    {
+     "raw": 4,
+     "label": "噩梦"
+    }
+   ],
+   "default": 3
+  },
+  {
+   "id": 38,
+   "name": "ZombieFeralSense",
+   "label": "凶残丧尸感知",
+   "desc": "丧尸视觉和听觉感知玩家的灵敏度。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": 0,
+     "label": "关闭"
+    },
+    {
+     "raw": 1,
+     "label": "白天"
+    },
+    {
+     "raw": 2,
+     "label": "夜晚"
+    },
+    {
+     "raw": 3,
+     "label": "全部"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 39,
+   "name": "AISmellMode",
+   "label": "AI 嗅觉模式",
+   "desc": "启用或禁用丧尸气味追踪，并设置当它们嗅到气味时移动的速度。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": 0,
+     "label": "无"
+    },
+    {
+     "raw": 1,
+     "label": "行走"
+    },
+    {
+     "raw": 2,
+     "label": "慢跑"
+    },
+    {
+     "raw": 3,
+     "label": "奔跑"
+    },
+    {
+     "raw": 4,
+     "label": "冲刺"
+    },
+    {
+     "raw": 5,
+     "label": "噩梦"
+    }
+   ],
+   "default": 3
+  },
+  {
+   "id": 40,
+   "name": "AllowZombieDigging",
+   "label": "丧尸挖掘",
+   "desc": "允许丧尸向下挖掘地形。仍可横向挖掘。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 41,
+   "name": "ZombieRageChance",
+   "label": "丧尸狂暴",
+   "desc": "丧尸受到伤害时进入狂暴模式的几率。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.15000000596046448,
+     "label": "15%"
+    },
+    {
+     "raw": 0.30000001192092896,
+     "label": "30%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.4000000059604645,
+     "label": "40%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6000000238418579,
+     "label": "60%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8999999761581421,
+     "label": "90%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 42,
+   "name": "EntityIncomingDamage",
+   "label": "实体所受伤害",
+   "desc": "敌人和动物等实体受到来自玩家的伤害。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 2.5,
+     "label": "250%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 6
+  },
+  {
+   "id": 43,
+   "name": "MaxEnemyTier",
+   "label": "最大敌人等级",
+   "desc": "可生成的丧尸种类的最大等级。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": 0,
+     "label": "普通"
+    },
+    {
+     "raw": 1,
+     "label": "强壮"
+    },
+    {
+     "raw": 2,
+     "label": "特殊"
+    },
+    {
+     "raw": 3,
+     "label": "凶残"
+    },
+    {
+     "raw": 4,
+     "label": "辐射"
+    },
+    {
+     "raw": 5,
+     "label": "精英"
+    }
+   ],
+   "default": 5
+  },
+  {
+   "id": 44,
+   "name": "BiomeDayZombieRespawn",
+   "label": "白天敌人重新生成",
+   "desc": "提高白天期间当前活跃生态环境中敌人的重新生成率。默认采用 XML 配置值。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": 0,
+     "label": "默认"
+    },
+    {
+     "raw": 1,
+     "label": "非常慢"
+    },
+    {
+     "raw": 2,
+     "label": "慢速"
+    },
+    {
+     "raw": 3,
+     "label": "普通"
+    },
+    {
+     "raw": 4,
+     "label": "快速"
+    },
+    {
+     "raw": 5,
+     "label": "非常快"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 45,
+   "name": "BiomeDayAnimalRespawn",
+   "label": "白天动物重新生成",
+   "desc": "提高白天期间当前活跃生态环境中动物的重新生成率。此设置会影响非丧尸类、可作为食物来源的温顺动物和攻击性动物。默认采用 XML 配置值。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": 0,
+     "label": "默认"
+    },
+    {
+     "raw": 1,
+     "label": "非常慢"
+    },
+    {
+     "raw": 2,
+     "label": "慢速"
+    },
+    {
+     "raw": 3,
+     "label": "普通"
+    },
+    {
+     "raw": 4,
+     "label": "快速"
+    },
+    {
+     "raw": 5,
+     "label": "非常快"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 46,
+   "name": "BiomeDayEnemyDensity",
+   "label": "白天敌人密度",
+   "desc": "覆盖各生态环境的白天敌人密度设置，并设定各生态环境中生成的敌人数量。默认采用 XML 配置值。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": -1,
+     "label": "无"
+    },
+    {
+     "raw": 0,
+     "label": "默认"
+    },
+    {
+     "raw": 1,
+     "label": "非常低"
+    },
+    {
+     "raw": 2,
+     "label": "低"
+    },
+    {
+     "raw": 3,
+     "label": "中等"
+    },
+    {
+     "raw": 4,
+     "label": "高"
+    },
+    {
+     "raw": 5,
+     "label": "非常高"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 47,
+   "name": "ZombiesEatAnimals",
+   "label": "丧尸吃动物",
+   "desc": "决定丧尸是否会吃动物的尸体。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 48,
+   "name": "BloodMoonFrequency",
+   "label": "血月频率",
+   "desc": "两次血月之间间隔的游戏内天数。禁用 = 没有血月。",
+   "category": "World",
+   "values": [
+    {
+     "raw": 0,
+     "label": "关闭"
+    },
+    {
+     "raw": 1,
+     "label": "1 日"
+    },
+    {
+     "raw": 2,
+     "label": "2 日"
+    },
+    {
+     "raw": 3,
+     "label": "3 日"
+    },
+    {
+     "raw": 4,
+     "label": "4 日"
+    },
+    {
+     "raw": 5,
+     "label": "5 日"
+    },
+    {
+     "raw": 6,
+     "label": "6 日"
+    },
+    {
+     "raw": 7,
+     "label": "7 日"
+    },
+    {
+     "raw": 8,
+     "label": "8 日"
+    },
+    {
+     "raw": 9,
+     "label": "9 日"
+    },
+    {
+     "raw": 10,
+     "label": "10 日"
+    },
+    {
+     "raw": 14,
+     "label": "14 日"
+    },
+    {
+     "raw": 20,
+     "label": "20 日"
+    },
+    {
+     "raw": 30,
+     "label": "30 日"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 49,
+   "name": "BloodMoonRange",
+   "label": "血月范围",
+   "desc": "在血月基础间隔之上额外增加的随机天数范围。\\n\\n例如：若设定为基础间隔 7 天 + 随机范围 5 天，则血月会在第 7 天到第 12 天之间随机出现。\\n\\n0 天 = 无额外随机天数。",
+   "category": "World",
+   "values": [
+    {
+     "raw": 0,
+     "label": "0 日"
+    },
+    {
+     "raw": 1,
+     "label": "1 日"
+    },
+    {
+     "raw": 2,
+     "label": "2 日"
+    },
+    {
+     "raw": 3,
+     "label": "3 日"
+    },
+    {
+     "raw": 4,
+     "label": "4 日"
+    },
+    {
+     "raw": 7,
+     "label": "7 日"
+    },
+    {
+     "raw": 10,
+     "label": "10 日"
+    },
+    {
+     "raw": 14,
+     "label": "14 日"
+    },
+    {
+     "raw": 20,
+     "label": "20 日"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 50,
+   "name": "BloodMoonWarning",
+   "label": "血月警告",
+   "desc": "设置何时 HUD 上会出现血月警告，并且天数数字变成红色。",
+   "category": "World",
+   "values": [
+    {
+     "raw": 0,
+     "label": "关闭"
+    },
+    {
+     "raw": 1,
+     "label": "早晨"
+    },
+    {
+     "raw": 2,
+     "label": "晚上"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 51,
+   "name": "BloodMoonEnemyCount",
+   "label": "血月计数",
+   "desc": "控制血月期间每位玩家对应的最大存活丧尸数量。\\n\\n附近玩家共享最多30只丧尸的上限。若达到上限，将通过游戏阶段机制提升难度，而非继续生成丧尸。全局上限约为 MaxSpawnedZombies 的 1.9 倍。较低的游戏阶段会减少生成数量。\\n\\n提高该设置可能会显著影响性能。",
+   "category": "World",
+   "values": [
+    {
+     "raw": 4,
+     "label": "4 敌人"
+    },
+    {
+     "raw": 6,
+     "label": "6 敌人"
+    },
+    {
+     "raw": 8,
+     "label": "8 敌人"
+    },
+    {
+     "raw": 10,
+     "label": "10 敌人"
+    },
+    {
+     "raw": 12,
+     "label": "12 敌人"
+    },
+    {
+     "raw": 16,
+     "label": "16 敌人"
+    },
+    {
+     "raw": 24,
+     "label": "24 敌人"
+    },
+    {
+     "raw": 32,
+     "label": "32 敌人"
+    },
+    {
+     "raw": 64,
+     "label": "64 敌人"
+    }
+   ],
+   "default": 2
+  },
+  {
+   "id": 52,
+   "name": "AirDropFrequency",
+   "label": "空投",
+   "desc": "空投补给的频率。",
+   "category": "World",
+   "values": [
+    {
+     "raw": 0,
+     "label": "关闭"
+    },
+    {
+     "raw": 1,
+     "label": "每天"
+    },
+    {
+     "raw": 2,
+     "label": "2 日"
+    },
+    {
+     "raw": 3,
+     "label": "3 日"
+    },
+    {
+     "raw": 4,
+     "label": "4 日"
+    },
+    {
+     "raw": 5,
+     "label": "5 日"
+    },
+    {
+     "raw": 6,
+     "label": "6 日"
+    }
+   ],
+   "default": 3
+  },
+  {
+   "id": 53,
+   "name": "AirDropMarker",
+   "label": "标记空投",
+   "desc": "在地图和指南针上显示空投位置的标记。",
+   "category": "World",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 54,
+   "name": "AirDropRandomTime",
+   "label": "空投变化",
+   "desc": "允许控制空投出现的时间。选择一个特定的时间可使空投按时出现，或选择“任意”以实现完全随机。\\n\\n无 = 默认中午空投。\\n早晨 = 04:00 - 10:00\\n日间 = 10:00 - 14:00\\n傍晚 = 15:00 - 20:00\\n夜间 = 20:00 - 24:00\\n全天 = 04:00 - 20:00",
+   "category": "World",
+   "values": [
+    {
+     "raw": 0,
+     "label": "无"
+    },
+    {
+     "raw": 1,
+     "label": "早晨"
+    },
+    {
+     "raw": 2,
+     "label": "日间"
+    },
+    {
+     "raw": 3,
+     "label": "晚上"
+    },
+    {
+     "raw": 4,
+     "label": "深夜"
+    },
+    {
+     "raw": 5,
+     "label": "全天"
+    },
+    {
+     "raw": 6,
+     "label": "任何"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 55,
+   "name": "BiomeProgression",
+   "label": "生态环境进度",
+   "desc": "启用环境危害。天气和风暴不受此设置影响。",
+   "category": "World",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 56,
+   "name": "TemperatureSurvival",
+   "label": "温度生存",
+   "desc": "设置环境温度（高温和低温）是否对玩家造成影响。",
+   "category": "World",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 57,
+   "name": "StormFreq",
+   "label": "风暴频率",
+   "desc": "调整风暴出现的频率。设为“无”将禁用风暴。",
+   "category": "World",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    },
+    {
+     "raw": 5.0,
+     "label": "500%"
+    }
+   ],
+   "default": 2
+  },
+  {
+   "id": 58,
+   "name": "StormWarning",
+   "label": "风暴警告",
+   "desc": "控制玩家是否会听到风暴警报声和看到屏幕上的风暴警告提示。",
+   "category": "World",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 59,
+   "name": "HeatMapSensitivity",
+   "label": "热力图敏感度",
+   "desc": "玩家活动对热力图的影响程度。热量越高，尖叫丧尸刷新概率越高。默认读取配置文件参数。",
+   "category": "World",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "关闭"
+    },
+    {
+     "raw": 0.25,
+     "label": "非常低"
+    },
+    {
+     "raw": 0.5,
+     "label": "低"
+    },
+    {
+     "raw": 1.0,
+     "label": "默认"
+    },
+    {
+     "raw": 1.5,
+     "label": "高"
+    },
+    {
+     "raw": 2.0,
+     "label": "非常高"
+    }
+   ],
+   "default": 3
+  },
+  {
+   "id": 60,
+   "name": "GlobalGSModifier",
+   "label": "全局游戏阶段",
+   "desc": "根据你的等级和存活天数，决定敌人类型、难度升级、战利品品质和血月强度。数值越高，难度越高。默认读取配置文件参数。",
+   "category": "World",
+   "values": [
+    {
+     "raw": 0.25,
+     "label": "非常低"
+    },
+    {
+     "raw": 0.5,
+     "label": "低"
+    },
+    {
+     "raw": 1.0,
+     "label": "默认"
+    },
+    {
+     "raw": 1.5,
+     "label": "高"
+    },
+    {
+     "raw": 2.0,
+     "label": "非常高"
+    }
+   ],
+   "default": 2
+  },
+  {
+   "id": 61,
+   "name": "BiomeGSModifier",
+   "label": "环境游戏阶段",
+   "desc": "基于环境的难度修正。更高难度的环境会提高敌人的强度和战利品等级，使其超出你的基础进度。默认读取配置文件参数。",
+   "category": "World",
+   "values": [
+    {
+     "raw": 0.25,
+     "label": "非常低"
+    },
+    {
+     "raw": 0.5,
+     "label": "低"
+    },
+    {
+     "raw": 1.0,
+     "label": "默认"
+    },
+    {
+     "raw": 1.5,
+     "label": "高"
+    },
+    {
+     "raw": 2.0,
+     "label": "非常高"
+    }
+   ],
+   "default": 2
+  },
+  {
+   "id": 62,
+   "name": "GlobalLSModifier",
+   "label": "全局战利品等级",
+   "desc": "作用于玩家战利品等级的全局倍数。默认读取配置文件参数。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": 0.25,
+     "label": "非常低"
+    },
+    {
+     "raw": 0.5,
+     "label": "低"
+    },
+    {
+     "raw": 1.0,
+     "label": "默认"
+    },
+    {
+     "raw": 1.5,
+     "label": "高"
+    },
+    {
+     "raw": 2.0,
+     "label": "非常高"
+    }
+   ],
+   "default": 2
+  },
+  {
+   "id": 63,
+   "name": "BiomeLSModifier",
+   "label": "环境战利品等级",
+   "desc": "按环境生效的战利品等级倍数。默认读取配置文件参数。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": 0.25,
+     "label": "非常低"
+    },
+    {
+     "raw": 0.5,
+     "label": "低"
+    },
+    {
+     "raw": 1.0,
+     "label": "默认"
+    },
+    {
+     "raw": 1.5,
+     "label": "高"
+    },
+    {
+     "raw": 2.0,
+     "label": "非常高"
+    }
+   ],
+   "default": 2
+  },
+  {
+   "id": 64,
+   "name": "POITierLSModifier",
+   "label": "目标点战利品等级",
+   "desc": "基于目标点等级的战利品等级倍数。默认读取配置文件参数。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": 0.25,
+     "label": "非常低"
+    },
+    {
+     "raw": 0.5,
+     "label": "低"
+    },
+    {
+     "raw": 1.0,
+     "label": "默认"
+    },
+    {
+     "raw": 1.5,
+     "label": "高"
+    },
+    {
+     "raw": 2.0,
+     "label": "非常高"
+    }
+   ],
+   "default": 2
+  },
+  {
+   "id": 65,
+   "name": "GlobalTSModifier",
+   "label": "全局商人阶段",
+   "desc": "作用于商人阶段进程的全局修正。控制商人售卖道具的品质与种类丰富度。默认读取配置文件参数。",
+   "category": "Traders",
+   "values": [
+    {
+     "raw": 0.25,
+     "label": "非常低"
+    },
+    {
+     "raw": 0.5,
+     "label": "低"
+    },
+    {
+     "raw": 1.0,
+     "label": "默认"
+    },
+    {
+     "raw": 1.5,
+     "label": "高"
+    },
+    {
+     "raw": 2.0,
+     "label": "非常高"
+    }
+   ],
+   "default": 2
+  },
+  {
+   "id": 66,
+   "name": "DayNightLength",
+   "label": "24 小时周期",
+   "desc": "游戏内的 24 小时在现实世界中需花费多少分钟。",
+   "category": "World",
+   "values": [
+    {
+     "raw": 10,
+     "label": "10"
+    },
+    {
+     "raw": 20,
+     "label": "20"
+    },
+    {
+     "raw": 30,
+     "label": "30"
+    },
+    {
+     "raw": 40,
+     "label": "40"
+    },
+    {
+     "raw": 50,
+     "label": "50"
+    },
+    {
+     "raw": 60,
+     "label": "60"
+    },
+    {
+     "raw": 90,
+     "label": "90"
+    },
+    {
+     "raw": 120,
+     "label": "120"
+    }
+   ],
+   "default": 5
+  },
+  {
+   "id": 67,
+   "name": "DayLightLength",
+   "label": "白昼时长",
+   "desc": "设置游戏内白昼的时长。总是夜晚和总是白天模式的运行逻辑不变。白昼时长参数：\\n\\n4 小时 = 10:00 - 14:00\\n6 小时 = 09:00 - 15:00\\n8 小时 = 08:00 - 16:00\\n10 小时 = 07:00 - 17:00\\n12 小时 = 06:00 - 18:00\\n14 小时 = 05:00 - 19:00\\n16 小时 = 04:00 - 20:00\\n18 小时 = 04:00 - 22:00\\n20 小时 = 02:00 - 22:00",
+   "category": "World",
+   "values": [
+    {
+     "raw": 0,
+     "label": "总是夜晚"
+    },
+    {
+     "raw": 4,
+     "label": "4"
+    },
+    {
+     "raw": 6,
+     "label": "6"
+    },
+    {
+     "raw": 8,
+     "label": "8"
+    },
+    {
+     "raw": 10,
+     "label": "10"
+    },
+    {
+     "raw": 12,
+     "label": "12"
+    },
+    {
+     "raw": 14,
+     "label": "14"
+    },
+    {
+     "raw": 16,
+     "label": "16"
+    },
+    {
+     "raw": 18,
+     "label": "18"
+    },
+    {
+     "raw": 20,
+     "label": "20"
+    },
+    {
+     "raw": 24,
+     "label": "总是白天"
+    }
+   ],
+   "default": 8
+  },
+  {
+   "id": 68,
+   "name": "AllowMap",
+   "label": "允许地图",
+   "desc": "开启游戏内地图。",
+   "category": "World",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 69,
+   "name": "AllowCompass",
+   "label": "允许指南针",
+   "desc": "显示玩家的指南针。",
+   "category": "World",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 70,
+   "name": "AllowScreenMarkers",
+   "label": "允许屏幕标记",
+   "desc": "在屏幕上显示导航标记。地图标记保持可见。",
+   "category": "World",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 71,
+   "name": "ShowLocationInfo",
+   "label": "显示地点信息",
+   "desc": "显示环境和目标点的名称和难度。",
+   "category": "World",
+   "values": [
+    {
+     "raw": 0,
+     "label": "否"
+    },
+    {
+     "raw": 1,
+     "label": "是"
+    },
+    {
+     "raw": 2,
+     "label": "仅名称"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 72,
+   "name": "ShowDayTime",
+   "label": "显示天数/时间",
+   "desc": "在屏幕上显示天数和时间信息。如果关闭此选项，血月警告提示也会一同关闭。",
+   "category": "World",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 73,
+   "name": "WorkstationsInTheWild",
+   "label": "野外工作站",
+   "desc": "允许在世界中生成可用的工作站。在生成新的纳维戈恩或随机世界生成地图时生效。",
+   "category": "World",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.05000000074505806,
+     "label": "5%"
+    },
+    {
+     "raw": 0.10000000149011612,
+     "label": "10%"
+    },
+    {
+     "raw": 0.20000000298023224,
+     "label": "20%"
+    },
+    {
+     "raw": 0.30000001192092896,
+     "label": "30%"
+    },
+    {
+     "raw": 0.4000000059604645,
+     "label": "40%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6000000238418579,
+     "label": "60%"
+    },
+    {
+     "raw": 0.699999988079071,
+     "label": "70%"
+    },
+    {
+     "raw": 0.800000011920929,
+     "label": "80%"
+    },
+    {
+     "raw": 0.8999999761581421,
+     "label": "90%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 74,
+   "name": "MaxTechType",
+   "label": "最大科技类型",
+   "desc": "全局设置武器和物品可达到的最高科技等级，让你可以控制进度和游戏节奏。参考下方分级：\\n\\n0级科技：石器、铁管\\n1级科技：铁器、AK-47\\n2级科技：钢材、战术突击步枪\\n3级科技：螺旋钻、M60",
+   "category": "World",
+   "values": [
+    {
+     "raw": 0,
+     "label": "无"
+    },
+    {
+     "raw": 1,
+     "label": "科技 0"
+    },
+    {
+     "raw": 2,
+     "label": "科技 1"
+    },
+    {
+     "raw": 3,
+     "label": "科技 2"
+    },
+    {
+     "raw": 4,
+     "label": "科技 3"
+    }
+   ],
+   "default": 4
+  },
+  {
+   "id": 75,
+   "name": "LootRespawnDays",
+   "label": "战利品刷新天数",
+   "desc": "未访问区域内战利品容器重置所需的天数。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": -1,
+     "label": "关闭"
+    },
+    {
+     "raw": 5,
+     "label": "5"
+    },
+    {
+     "raw": 7,
+     "label": "7"
+    },
+    {
+     "raw": 10,
+     "label": "10"
+    },
+    {
+     "raw": 15,
+     "label": "15"
+    },
+    {
+     "raw": 20,
+     "label": "20"
+    },
+    {
+     "raw": 30,
+     "label": "30"
+    },
+    {
+     "raw": 40,
+     "label": "40"
+    },
+    {
+     "raw": 50,
+     "label": "50"
+    }
+   ],
+   "default": 2
+  },
+  {
+   "id": 76,
+   "name": "LootTimer",
+   "label": "开箱时间",
+   "desc": "搜刮容器所需的时间。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 4
+  },
+  {
+   "id": 77,
+   "name": "LootMaxTier",
+   "label": "最大战利品品质",
+   "desc": "设置战利品中出现的武器和物品的最高品质。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": -1,
+     "label": "默认"
+    },
+    {
+     "raw": 1,
+     "label": "1"
+    },
+    {
+     "raw": 2,
+     "label": "2"
+    },
+    {
+     "raw": 3,
+     "label": "3"
+    },
+    {
+     "raw": 4,
+     "label": "4"
+    },
+    {
+     "raw": 5,
+     "label": "5"
+    },
+    {
+     "raw": 6,
+     "label": "6"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 78,
+   "name": "GlobalLootCount",
+   "label": "掉落率",
+   "desc": "全局调整地图内所有战利品产出总量。选择“无”将彻底关闭全部战利品，包含丧尸掉落袋和补给箱。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    },
+    {
+     "raw": 5.0,
+     "label": "500%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 79,
+   "name": "FoodLootCount",
+   "label": "食物丰富度",
+   "desc": "容器中找到的食物数量。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    },
+    {
+     "raw": 5.0,
+     "label": "500%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 80,
+   "name": "DrinkLootCount",
+   "label": "饮料丰富度",
+   "desc": "容器中找到的饮料数量。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    },
+    {
+     "raw": 5.0,
+     "label": "500%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 81,
+   "name": "MedicalLootCount",
+   "label": "药品丰富度",
+   "desc": "战利品中找到的药品数量。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    },
+    {
+     "raw": 5.0,
+     "label": "500%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 82,
+   "name": "AmmoLootCount",
+   "label": "弹药丰富度",
+   "desc": "战利品中找到的弹药数量。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    },
+    {
+     "raw": 5.0,
+     "label": "500%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 83,
+   "name": "ResourceLootCount",
+   "label": "资源丰富度",
+   "desc": "战利品中找到的资源物品数量。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    },
+    {
+     "raw": 5.0,
+     "label": "500%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 84,
+   "name": "ArmorLootCount",
+   "label": "护甲丰富度",
+   "desc": "战利品中找到的护甲和护甲部件数量。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    },
+    {
+     "raw": 5.0,
+     "label": "500%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 85,
+   "name": "MeleeLootCount",
+   "label": "近战武器丰富度",
+   "desc": "战利品中找到的近战武器和部件数量。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    },
+    {
+     "raw": 5.0,
+     "label": "500%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 86,
+   "name": "RangedLootCount",
+   "label": "远程武器丰富度",
+   "desc": "战利品中找到的远程武器和部件数量。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    },
+    {
+     "raw": 5.0,
+     "label": "500%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 87,
+   "name": "DukesLootCount",
+   "label": "货币丰富度",
+   "desc": "战利品中找到的公爵币和旧钞票数量。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    },
+    {
+     "raw": 5.0,
+     "label": "500%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 88,
+   "name": "CraftingMagazinesLootCount",
+   "label": "杂志丰富度",
+   "desc": "控制战利品中找到的制作杂志数量。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    },
+    {
+     "raw": 5.0,
+     "label": "500%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 89,
+   "name": "TreasureMapChance",
+   "label": "藏宝图生成概率",
+   "desc": "战利品容器和敌人战利品袋中生成藏宝图的概率倍率。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6000000238418579,
+     "label": "60%"
+    },
+    {
+     "raw": 0.699999988079071,
+     "label": "70%"
+    },
+    {
+     "raw": 0.800000011920929,
+     "label": "80%"
+    },
+    {
+     "raw": 0.8999999761581421,
+     "label": "90%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.100000023841858,
+     "label": "110%"
+    },
+    {
+     "raw": 1.2000000476837158,
+     "label": "120%"
+    },
+    {
+     "raw": 1.2999999523162842,
+     "label": "130%"
+    },
+    {
+     "raw": 1.399999976158142,
+     "label": "140%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 90,
+   "name": "LootBagChance",
+   "label": "战利品袋掉落",
+   "desc": "敌人死亡时掉落战利品袋的几率倍率。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    },
+    {
+     "raw": 5.0,
+     "label": "500%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 91,
+   "name": "CropOutput",
+   "label": "农作物产出",
+   "desc": "控制从野生和玩家种植的农作物收获到的资源数量。关闭后会提升生存难度。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    },
+    {
+     "raw": 5.0,
+     "label": "500%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 92,
+   "name": "SeedDropOutput",
+   "label": "种子掉落",
+   "desc": "玩家收获农作物获得的种子数量。不影响种子掉落几率或树木的种子。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    },
+    {
+     "raw": 5.0,
+     "label": "500%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 93,
+   "name": "CropGrowthSpeed",
+   "label": "农作物生长",
+   "desc": "调整玩家种植的作物和树木的生长速度。百分比数值越高，生长周期越长。注：现有存档内，作物需重新种植，修改才会生效。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": 1000.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.0,
+     "label": "立即"
+    },
+    {
+     "raw": 0.20000000298023224,
+     "label": "20%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 5
+  },
+  {
+   "id": 94,
+   "name": "BackpackCrafting",
+   "label": "背包制作",
+   "desc": "控制玩家可直接在背包中制作什么物品。\\n\\n否：禁用背包制作。\\n是：允许在背包中制作。\\n少量：允许在背包中制作少量配方。\\n仅工作台：无法在背包中制作，所有制作仅能在工作台完成。",
+   "category": "Crafting",
+   "values": [
+    {
+     "raw": 0,
+     "label": "否"
+    },
+    {
+     "raw": 1,
+     "label": "是"
+    },
+    {
+     "raw": 2,
+     "label": "有限"
+    },
+    {
+     "raw": 3,
+     "label": "仅工作台"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 95,
+   "name": "WorkstationCrafting",
+   "label": "工作台制作",
+   "desc": "是：允许在工作台制作物品。否：玩家仅可进行背包制作。",
+   "category": "Crafting",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 96,
+   "name": "CraftingProgression",
+   "label": "制作进度",
+   "desc": "启用或禁用基于杂志和设计图的制作进度。",
+   "category": "Crafting",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 97,
+   "name": "CraftingTime",
+   "label": "制作计时器",
+   "desc": "制作物品所需的时间。",
+   "category": "Crafting",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 4
+  },
+  {
+   "id": 98,
+   "name": "CraftingInput",
+   "label": "制作消耗",
+   "desc": "制作所需的材料数量（不包括资源组合包）。",
+   "category": "Crafting",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 4
+  },
+  {
+   "id": 99,
+   "name": "CraftingOutput",
+   "label": "制作产出",
+   "desc": "每次制作产出的物品数量（不包括资源组合包）。",
+   "category": "Crafting",
+   "values": [
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 3
+  },
+  {
+   "id": 100,
+   "name": "CraftingMaxTier",
+   "label": "制作最高品质",
+   "desc": "设置制作物品的最高品质。",
+   "category": "Crafting",
+   "values": [
+    {
+     "raw": -1,
+     "label": "默认"
+    },
+    {
+     "raw": 1,
+     "label": "1"
+    },
+    {
+     "raw": 2,
+     "label": "2"
+    },
+    {
+     "raw": 3,
+     "label": "3"
+    },
+    {
+     "raw": 4,
+     "label": "4"
+    },
+    {
+     "raw": 5,
+     "label": "5"
+    },
+    {
+     "raw": 6,
+     "label": "6"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 101,
+   "name": "MiningOutput",
+   "label": "采矿产出",
+   "desc": "控制采矿获得的矿石数量。关闭后会提升生存难度。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    },
+    {
+     "raw": 5.0,
+     "label": "500%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 102,
+   "name": "HarvestingOutput",
+   "label": "资源产出",
+   "desc": "控制收获物块和物品获得的资源数量。不影响矿石、种子或农作物。关闭后会提升生存难度。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    },
+    {
+     "raw": 5.0,
+     "label": "500%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 103,
+   "name": "ScrappingOutput",
+   "label": "分解产出",
+   "desc": "分解物品时获得的数量。",
+   "category": "Crafting",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 4
+  },
+  {
+   "id": 104,
+   "name": "SmeltingType",
+   "label": "熔炉类型",
+   "desc": "控制锻造炉制作的方式。是将物品放入锻造炉进行熔炼，还是直接使用你背包中的材料进行制作。",
+   "category": "Crafting",
+   "values": [
+    {
+     "raw": false,
+     "label": "熔炉"
+    },
+    {
+     "raw": true,
+     "label": "配方"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 105,
+   "name": "DewCollectorTime",
+   "label": "露水收集器时间",
+   "desc": "调整露水收集器产出清水所需时间。",
+   "category": "Crafting",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 4
+  },
+  {
+   "id": 106,
+   "name": "DewCollectorOutput",
+   "label": "露水收集器产出",
+   "desc": "露水收集器单次产出的水量。",
+   "category": "Crafting",
+   "values": [
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    },
+    {
+     "raw": 5.0,
+     "label": "500%"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 107,
+   "name": "DewCollectorInput",
+   "label": "露水收集器原料",
+   "desc": "设置开始收集露水所需的空水罐数量。",
+   "category": "Crafting",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 108,
+   "name": "ApiaryTime",
+   "label": "蜂箱时长",
+   "desc": "调整蜂箱产出蜂蜜所需的时长。",
+   "category": "Crafting",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 4
+  },
+  {
+   "id": 109,
+   "name": "ApiaryOutput",
+   "label": "蜂箱产出",
+   "desc": "蜂箱单次蜂蜜产出量。",
+   "category": "Crafting",
+   "values": [
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    },
+    {
+     "raw": 5.0,
+     "label": "500%"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 110,
+   "name": "ApiaryInput",
+   "label": "蜂箱原料",
+   "desc": "设置蜂箱产蜜所需的花朵数量。",
+   "category": "Crafting",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.20000000298023224,
+     "label": "20%"
+    },
+    {
+     "raw": 0.4000000059604645,
+     "label": "40%"
+    },
+    {
+     "raw": 0.6000000238418579,
+     "label": "60%"
+    },
+    {
+     "raw": 0.800000011920929,
+     "label": "80%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 5
+  },
+  {
+   "id": 111,
+   "name": "BookLootCount",
+   "label": "书籍丰富度",
+   "desc": "控制战利品中找到的书籍和设计图数量。",
+   "category": "Resources",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    },
+    {
+     "raw": 5.0,
+     "label": "500%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 112,
+   "name": "CrouchRunSpeed",
+   "label": "蹲伏奔跑速度",
+   "desc": "调整玩家蹲伏奔跑时的移动速度。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6000000238418579,
+     "label": "60%"
+    },
+    {
+     "raw": 0.699999988079071,
+     "label": "70%"
+    },
+    {
+     "raw": 0.800000011920929,
+     "label": "80%"
+    },
+    {
+     "raw": 0.8999999761581421,
+     "label": "90%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.100000023841858,
+     "label": "110%"
+    },
+    {
+     "raw": 1.2000000476837158,
+     "label": "120%"
+    },
+    {
+     "raw": 1.2999999523162842,
+     "label": "130%"
+    },
+    {
+     "raw": 1.399999976158142,
+     "label": "140%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 113,
+   "name": "RepairTypes",
+   "label": "修理方式",
+   "desc": "决定物品的修理方式：\\n\\n无 = 不可修理\\n仅维修工具 = 仅可使用维修工具修理\\n仅合并工作站 = 仅可在合并工作站修理\\n两者皆可 = 可使用维修工具或合并工作站修理。",
+   "category": "Crafting",
+   "values": [
+    {
+     "raw": 0,
+     "label": "无"
+    },
+    {
+     "raw": 1,
+     "label": "仅修理"
+    },
+    {
+     "raw": 2,
+     "label": "仅合并"
+    },
+    {
+     "raw": 3,
+     "label": "均可"
+    }
+   ],
+   "default": 3
+  },
+  {
+   "id": 114,
+   "name": "MaxDegradationAmount",
+   "label": "修理损坏",
+   "desc": "决定物品修理后会损失多少耐久度。",
+   "category": "Crafting",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.05000000074505806,
+     "label": "5%"
+    },
+    {
+     "raw": 0.10000000149011612,
+     "label": "10%"
+    },
+    {
+     "raw": 0.15000000596046448,
+     "label": "15%"
+    },
+    {
+     "raw": 0.20000000298023224,
+     "label": "20%"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 115,
+   "name": "PointsPerMagazine",
+   "label": "杂志进度",
+   "desc": "阅读技能杂志获得的进度。",
+   "category": "Crafting",
+   "values": [
+    {
+     "raw": 0,
+     "label": "无"
+    },
+    {
+     "raw": 1,
+     "label": "1"
+    },
+    {
+     "raw": 2,
+     "label": "2"
+    },
+    {
+     "raw": 3,
+     "label": "3"
+    },
+    {
+     "raw": 4,
+     "label": "4"
+    },
+    {
+     "raw": 5,
+     "label": "5"
+    },
+    {
+     "raw": 6,
+     "label": "6"
+    },
+    {
+     "raw": 7,
+     "label": "7"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 116,
+   "name": "SkillGainRate",
+   "label": "技能获得速率",
+   "desc": "调整需要多少等级才能获得技能点。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 1,
+     "label": "1"
+    },
+    {
+     "raw": 2,
+     "label": "2"
+    },
+    {
+     "raw": 3,
+     "label": "3"
+    },
+    {
+     "raw": 4,
+     "label": "4"
+    },
+    {
+     "raw": 5,
+     "label": "5"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 117,
+   "name": "SkillPointsPerLevel",
+   "label": "技能获得数量",
+   "desc": "控制在获得技能点时会获得多少技能点。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0,
+     "label": "无"
+    },
+    {
+     "raw": 1,
+     "label": "1"
+    },
+    {
+     "raw": 2,
+     "label": "2"
+    },
+    {
+     "raw": 3,
+     "label": "3"
+    },
+    {
+     "raw": 4,
+     "label": "4"
+    },
+    {
+     "raw": 5,
+     "label": "5"
+    },
+    {
+     "raw": 6,
+     "label": "6"
+    },
+    {
+     "raw": 7,
+     "label": "7"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 118,
+   "name": "QuestsEnabled",
+   "label": "任务",
+   "desc": "启用或禁用游戏内任务。",
+   "category": "Tasks",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 119,
+   "name": "IntroQuestEnabled",
+   "label": "入门任务",
+   "desc": "跳过开头的埋藏补给任务，直接解锁完整任务流程。",
+   "category": "Tasks",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 120,
+   "name": "TraderToTraderQuestsEnabled",
+   "label": "商贸路线",
+   "desc": "允许接受去找其他商人的任务。",
+   "category": "Tasks",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 121,
+   "name": "StarterSkillPoints",
+   "label": "基础技能点",
+   "desc": "完成新手引导任务可获得的技能点数。如果关闭引导，则开局直接发放对应点数。",
+   "category": "Tasks",
+   "values": [
+    {
+     "raw": 0,
+     "label": "无"
+    },
+    {
+     "raw": 1,
+     "label": "1"
+    },
+    {
+     "raw": 2,
+     "label": "2"
+    },
+    {
+     "raw": 3,
+     "label": "3"
+    },
+    {
+     "raw": 4,
+     "label": "4"
+    },
+    {
+     "raw": 5,
+     "label": "5"
+    },
+    {
+     "raw": 6,
+     "label": "6"
+    },
+    {
+     "raw": 7,
+     "label": "7"
+    },
+    {
+     "raw": 8,
+     "label": "8"
+    },
+    {
+     "raw": 9,
+     "label": "9"
+    },
+    {
+     "raw": 10,
+     "label": "10"
+    }
+   ],
+   "default": 4
+  },
+  {
+   "id": 122,
+   "name": "QuestsPerTier",
+   "label": "每级任务",
+   "desc": "解锁下一等级所需完成的任务数量。数值越高，升级的进度越慢。无 = 无限制，可直接访问全部任务等级。",
+   "category": "Tasks",
+   "values": [
+    {
+     "raw": 0,
+     "label": "无"
+    },
+    {
+     "raw": 1,
+     "label": "1"
+    },
+    {
+     "raw": 2,
+     "label": "2"
+    },
+    {
+     "raw": 3,
+     "label": "3"
+    },
+    {
+     "raw": 4,
+     "label": "4"
+    },
+    {
+     "raw": 5,
+     "label": "5"
+    },
+    {
+     "raw": 6,
+     "label": "6"
+    },
+    {
+     "raw": 7,
+     "label": "7"
+    },
+    {
+     "raw": 8,
+     "label": "8"
+    },
+    {
+     "raw": 9,
+     "label": "9"
+    },
+    {
+     "raw": 10,
+     "label": "10"
+    },
+    {
+     "raw": 11,
+     "label": "11"
+    },
+    {
+     "raw": 12,
+     "label": "12"
+    },
+    {
+     "raw": 13,
+     "label": "13"
+    },
+    {
+     "raw": 14,
+     "label": "14"
+    },
+    {
+     "raw": 15,
+     "label": "15"
+    }
+   ],
+   "default": 10
+  },
+  {
+   "id": 123,
+   "name": "QuestProgressionDailyLimit",
+   "label": "每日任务数",
+   "desc": "计入商人进度的每日任务数量。额外的任务仍会给予经验值和奖励，但不会推进商人等级进度。",
+   "category": "Tasks",
+   "values": [
+    {
+     "raw": -1,
+     "label": "无限制"
+    },
+    {
+     "raw": 1,
+     "label": "1"
+    },
+    {
+     "raw": 2,
+     "label": "2"
+    },
+    {
+     "raw": 3,
+     "label": "3"
+    },
+    {
+     "raw": 4,
+     "label": "4"
+    },
+    {
+     "raw": 5,
+     "label": "5"
+    },
+    {
+     "raw": 6,
+     "label": "6"
+    },
+    {
+     "raw": 7,
+     "label": "7"
+    },
+    {
+     "raw": 8,
+     "label": "8"
+    },
+    {
+     "raw": 9,
+     "label": "9"
+    },
+    {
+     "raw": 10,
+     "label": "10"
+    }
+   ],
+   "default": 4
+  },
+  {
+   "id": 124,
+   "name": "BuriedQuestsEnabled",
+   "label": "埋藏任务",
+   "desc": "是否在商人任务列表刷新埋藏任务。如果关闭，则仅刷新目标点任务。",
+   "category": "Tasks",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 125,
+   "name": "POIQuestsEnabled",
+   "label": "目标点任务",
+   "desc": "是否在商人任务列表刷新目标点任务。如果关闭，则仅刷新埋藏任务。",
+   "category": "Tasks",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 126,
+   "name": "TraderDialog",
+   "label": "交易对话",
+   "desc": "隐藏/显示商人的语音台词和屏幕上的对话。",
+   "category": "Traders",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 127,
+   "name": "TraderHours",
+   "label": "商人营业时间",
+   "desc": "控制商人的营业时间。“24 小时周期”和“白昼时长”不会影响此设置。“血月关闭”表示商人仅在血月期间歇业。默认值采用 XML 参数。\\n\\nXML 默认值 = 04:00-22:00\\n 早晨 = 04:00-12:00\\n中午 = 10:00-18:00\\n 傍晚 = 16:00-22:00\\n夜间 = 22:00-04:00",
+   "category": "Traders",
+   "values": [
+    {
+     "raw": 0,
+     "label": "默认"
+    },
+    {
+     "raw": 1,
+     "label": "早晨"
+    },
+    {
+     "raw": 2,
+     "label": "日间"
+    },
+    {
+     "raw": 3,
+     "label": "晚上"
+    },
+    {
+     "raw": 4,
+     "label": "深夜"
+    },
+    {
+     "raw": 5,
+     "label": "血月已关闭"
+    },
+    {
+     "raw": 6,
+     "label": "总是开门"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 128,
+   "name": "TradersEnabled",
+   "label": "交易开启",
+   "desc": "允许与 NPC 商人交易。",
+   "category": "Traders",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 129,
+   "name": "VendingEnabled",
+   "label": "贩卖机开启",
+   "desc": "启用或禁用自动贩卖机功能。",
+   "category": "Traders",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 130,
+   "name": "TraderSellPrices",
+   "label": "出售价格",
+   "desc": "调整玩家出售物品给商人的价格。",
+   "category": "Traders",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 1.75,
+     "label": "175%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    }
+   ],
+   "default": 4
+  },
+  {
+   "id": 131,
+   "name": "TraderBuyPrices",
+   "label": "购买价格",
+   "desc": "调整玩家向商人购买物品的价格。",
+   "category": "Traders",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 1.75,
+     "label": "175%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    }
+   ],
+   "default": 4
+  },
+  {
+   "id": 132,
+   "name": "TraderProtection",
+   "label": "商人保护",
+   "desc": "设置商人据点的伤害保护，以及玩家是否可以占领该区域。",
+   "category": "Traders",
+   "values": [
+    {
+     "raw": 0,
+     "label": "是"
+    },
+    {
+     "raw": 1,
+     "label": "可占领"
+    },
+    {
+     "raw": 2,
+     "label": "不可占领"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 133,
+   "name": "TraderResetInterval",
+   "label": "商人重置",
+   "desc": "设置商人重置库存的频率。默认读取配置文件参数。",
+   "category": "Traders",
+   "values": [
+    {
+     "raw": -1,
+     "label": "默认"
+    },
+    {
+     "raw": 1,
+     "label": "1 日"
+    },
+    {
+     "raw": 2,
+     "label": "2 日"
+    },
+    {
+     "raw": 3,
+     "label": "3 日"
+    },
+    {
+     "raw": 4,
+     "label": "4 日"
+    },
+    {
+     "raw": 5,
+     "label": "5 日"
+    },
+    {
+     "raw": 6,
+     "label": "6 日"
+    },
+    {
+     "raw": 7,
+     "label": "7 日"
+    },
+    {
+     "raw": 14,
+     "label": "14 日"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 134,
+   "name": "TraderItemAbundance",
+   "label": "商人物品数量",
+   "desc": "商人出售物品的数量。数值越低，物资越有限和稀缺。默认读取配置文件参数。",
+   "category": "Traders",
+   "values": [
+    {
+     "raw": 0.25,
+     "label": "非常低"
+    },
+    {
+     "raw": 0.5,
+     "label": "低"
+    },
+    {
+     "raw": 1.0,
+     "label": "默认"
+    },
+    {
+     "raw": 1.5,
+     "label": "高"
+    },
+    {
+     "raw": 2.0,
+     "label": "非常高"
+    }
+   ],
+   "default": 2
+  },
+  {
+   "id": 135,
+   "name": "TraderBuyLimit",
+   "label": "商人收购上限",
+   "desc": "商人收购玩家物品的数量上限，超过后将拒绝继续收购。该值决定了玩家每次卖出囤积物资的价格。",
+   "category": "Traders",
+   "values": [
+    {
+     "raw": 0,
+     "label": "无"
+    },
+    {
+     "raw": 1,
+     "label": "1"
+    },
+    {
+     "raw": 2,
+     "label": "2"
+    },
+    {
+     "raw": 3,
+     "label": "3"
+    },
+    {
+     "raw": 4,
+     "label": "4"
+    },
+    {
+     "raw": 5,
+     "label": "5"
+    },
+    {
+     "raw": 6,
+     "label": "6"
+    },
+    {
+     "raw": 7,
+     "label": "7"
+    },
+    {
+     "raw": 8,
+     "label": "8"
+    },
+    {
+     "raw": 9,
+     "label": "9"
+    },
+    {
+     "raw": 10,
+     "label": "10"
+    }
+   ],
+   "default": 3
+  },
+  {
+   "id": 136,
+   "name": "TraderMaxTier",
+   "label": "商人最高品质",
+   "desc": "设置可从商人处购买物品的最高品质。",
+   "category": "Traders",
+   "values": [
+    {
+     "raw": -1,
+     "label": "默认"
+    },
+    {
+     "raw": 1,
+     "label": "1"
+    },
+    {
+     "raw": 2,
+     "label": "2"
+    },
+    {
+     "raw": 3,
+     "label": "3"
+    },
+    {
+     "raw": 4,
+     "label": "4"
+    },
+    {
+     "raw": 5,
+     "label": "5"
+    },
+    {
+     "raw": 6,
+     "label": "6"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 137,
+   "name": "VendingResetInterval",
+   "label": "贩卖机重置",
+   "desc": "设置商人自动贩卖机重置库存的频率。默认读取配置文件参数。",
+   "category": "Traders",
+   "values": [
+    {
+     "raw": -1,
+     "label": "默认"
+    },
+    {
+     "raw": 1,
+     "label": "1 日"
+    },
+    {
+     "raw": 2,
+     "label": "2 日"
+    },
+    {
+     "raw": 3,
+     "label": "3 日"
+    },
+    {
+     "raw": 4,
+     "label": "4 日"
+    },
+    {
+     "raw": 5,
+     "label": "5 日"
+    },
+    {
+     "raw": 6,
+     "label": "6 日"
+    },
+    {
+     "raw": 7,
+     "label": "7 日"
+    },
+    {
+     "raw": 14,
+     "label": "14 日"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 138,
+   "name": "VendingItemAbundance",
+   "label": "贩卖机物品数量",
+   "desc": "自动贩卖机出售物品的数量。数值越低，物资越有限和稀缺。默认读取配置文件参数。",
+   "category": "Traders",
+   "values": [
+    {
+     "raw": 0.25,
+     "label": "非常低"
+    },
+    {
+     "raw": 0.5,
+     "label": "低"
+    },
+    {
+     "raw": 1.0,
+     "label": "默认"
+    },
+    {
+     "raw": 1.5,
+     "label": "高"
+    },
+    {
+     "raw": 2.0,
+     "label": "非常高"
+    }
+   ],
+   "default": 2
+  },
+  {
+   "id": 139,
+   "name": "ChallengesEnabled",
+   "label": "挑战",
+   "desc": "开启游戏内挑战系统。",
+   "category": "Tasks",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 140,
+   "name": "IntroChallengesEnabled",
+   "label": "入门挑战",
+   "desc": "开启新手引导挑战任务。",
+   "category": "Tasks",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 141,
+   "name": "VehicleFuelUsage",
+   "label": "载具燃料使用量",
+   "desc": "调整载具消耗燃料的速率。",
+   "category": "Misc",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 2.5,
+     "label": "250%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 142,
+   "name": "VehicleEntityDamage",
+   "label": "载具实体伤害",
+   "desc": "载具对实体造成的伤害量。",
+   "category": "Misc",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 2.5,
+     "label": "250%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 143,
+   "name": "VehicleBlockDamage",
+   "label": "载具物块伤害",
+   "desc": "载具对物块造成的伤害量。",
+   "category": "Misc",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 2.5,
+     "label": "250%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 144,
+   "name": "VehicleSelfDamage",
+   "label": "载具自身伤害",
+   "desc": "你的载具发生碰撞时自身受到的伤害量。",
+   "category": "Misc",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.3499999940395355,
+     "label": "35%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6499999761581421,
+     "label": "65%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 0.8500000238418579,
+     "label": "85%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 2.5,
+     "label": "250%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 7
+  },
+  {
+   "id": 145,
+   "name": "ElectricalOutput",
+   "label": "电力输出",
+   "desc": "控制发电量。",
+   "category": "Misc",
+   "values": [
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 3
+  },
+  {
+   "id": 146,
+   "name": "SillyCelebrate",
+   "label": "庆祝击杀",
+   "desc": "开启击杀实体时的庆祝五彩纸屑特效。“仅限爆头”选项仅会在爆头击杀时触发五彩纸屑特效，因此可以射击动物的身体以收集肉类。“仅限爆头”选项不适用于非敌对动物。",
+   "category": "Misc",
+   "values": [
+    {
+     "raw": 0,
+     "label": "否"
+    },
+    {
+     "raw": 1,
+     "label": "是"
+    },
+    {
+     "raw": 2,
+     "label": "仅限爆头"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 147,
+   "name": "SillyBigHeads",
+   "label": "大头",
+   "desc": "开启丧尸、动物和商人的“大头模式”。",
+   "category": "Misc",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 148,
+   "name": "SillyTinyZombies",
+   "label": "迷你丧尸",
+   "desc": "启用缩小版的丧尸。",
+   "category": "Misc",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 149,
+   "name": "SillySounds",
+   "label": "滑稽声音",
+   "desc": "为游戏内的动作开启滑稽音效。",
+   "category": "Misc",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 150,
+   "name": "SillyLowGravity",
+   "label": "重力",
+   "desc": "控制游戏内重力的大小。",
+   "category": "Misc",
+   "values": [
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.6000000238418579,
+     "label": "60%"
+    },
+    {
+     "raw": 0.699999988079071,
+     "label": "70%"
+    },
+    {
+     "raw": 0.800000011920929,
+     "label": "80%"
+    },
+    {
+     "raw": 0.8999999761581421,
+     "label": "90%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    }
+   ],
+   "default": 5
+  },
+  {
+   "id": 151,
+   "name": "SillyBlackandWhite",
+   "label": "黑白",
+   "desc": "启用经典黑白色调（灵感源自 20 世纪 60 年代的恐怖电影）。",
+   "category": "Misc",
+   "values": [
+    {
+     "raw": false,
+     "label": "否"
+    },
+    {
+     "raw": true,
+     "label": "是"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 152,
+   "name": "ChickenCoopTime",
+   "label": "鸡舍生产时间",
+   "desc": "调整鸡舍产出鸡只、鸡蛋和羽毛所需的时间。",
+   "category": "Crafting",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 4
+  },
+  {
+   "id": 153,
+   "name": "ChickenCoopOutput",
+   "label": "鸡舍产量",
+   "desc": "每个生产周期产出的鸡只、鸡蛋和羽毛数量。",
+   "category": "Crafting",
+   "values": [
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    },
+    {
+     "raw": 5.0,
+     "label": "500%"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 154,
+   "name": "ChickenCoopInput",
+   "label": "鸡舍投入量",
+   "desc": "设置开始生产所需的饲料量。",
+   "category": "Crafting",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.20000000298023224,
+     "label": "20%"
+    },
+    {
+     "raw": 0.4000000059604645,
+     "label": "40%"
+    },
+    {
+     "raw": 0.6000000238418579,
+     "label": "60%"
+    },
+    {
+     "raw": 0.800000011920929,
+     "label": "80%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 5
+  },
+  {
+   "id": 155,
+   "name": "BiomeDayAnimalDensity",
+   "label": "白天动物密度",
+   "desc": "覆盖各生态环境的白天动物密度设置，并设定各生态环境中生成的动物数量。默认采用 XML 配置值。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": -1,
+     "label": "无"
+    },
+    {
+     "raw": 0,
+     "label": "默认"
+    },
+    {
+     "raw": 1,
+     "label": "非常低"
+    },
+    {
+     "raw": 2,
+     "label": "低"
+    },
+    {
+     "raw": 3,
+     "label": "中等"
+    },
+    {
+     "raw": 4,
+     "label": "高"
+    },
+    {
+     "raw": 5,
+     "label": "非常高"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 156,
+   "name": "BiomeNightZombieRespawn",
+   "label": "夜间敌人重新生成",
+   "desc": "提高夜间当前活跃生态环境中敌人的重新生成率。默认采用 XML 配置值。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": 0,
+     "label": "默认"
+    },
+    {
+     "raw": 1,
+     "label": "非常慢"
+    },
+    {
+     "raw": 2,
+     "label": "慢速"
+    },
+    {
+     "raw": 3,
+     "label": "普通"
+    },
+    {
+     "raw": 4,
+     "label": "快速"
+    },
+    {
+     "raw": 5,
+     "label": "非常快"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 157,
+   "name": "BiomeNightAnimalRespawn",
+   "label": "夜间动物重新生成",
+   "desc": "提高夜间当前活跃生态环境中动物的重新生成率。此设置会影响非丧尸类、可作为食物来源的温顺动物和攻击性动物。默认采用 XML 配置值。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": 0,
+     "label": "默认"
+    },
+    {
+     "raw": 1,
+     "label": "非常慢"
+    },
+    {
+     "raw": 2,
+     "label": "慢速"
+    },
+    {
+     "raw": 3,
+     "label": "普通"
+    },
+    {
+     "raw": 4,
+     "label": "快速"
+    },
+    {
+     "raw": 5,
+     "label": "非常快"
+    }
+   ],
+   "default": 0
+  },
+  {
+   "id": 158,
+   "name": "BiomeNightEnemyDensity",
+   "label": "夜间敌人密度",
+   "desc": "覆盖各生态环境的夜间敌人密度设置，并设定各生态环境中生成的敌人数量。默认采用 XML 配置值。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": -1,
+     "label": "无"
+    },
+    {
+     "raw": 0,
+     "label": "默认"
+    },
+    {
+     "raw": 1,
+     "label": "非常低"
+    },
+    {
+     "raw": 2,
+     "label": "低"
+    },
+    {
+     "raw": 3,
+     "label": "中等"
+    },
+    {
+     "raw": 4,
+     "label": "高"
+    },
+    {
+     "raw": 5,
+     "label": "非常高"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 159,
+   "name": "BiomeNightAnimalDensity",
+   "label": "夜间动物密度",
+   "desc": "覆盖各生态环境的夜间动物密度设置，并设定各生态环境中生成的动物数量。默认采用 XML 配置值。",
+   "category": "Entities",
+   "values": [
+    {
+     "raw": -1,
+     "label": "无"
+    },
+    {
+     "raw": 0,
+     "label": "默认"
+    },
+    {
+     "raw": 1,
+     "label": "非常低"
+    },
+    {
+     "raw": 2,
+     "label": "低"
+    },
+    {
+     "raw": 3,
+     "label": "中等"
+    },
+    {
+     "raw": 4,
+     "label": "高"
+    },
+    {
+     "raw": 5,
+     "label": "非常高"
+    }
+   ],
+   "default": 1
+  },
+  {
+   "id": 160,
+   "name": "InfectionChance",
+   "label": "感染几率",
+   "desc": "提高或降低玩家感染的几率。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    }
+   ],
+   "default": 4
+  },
+  {
+   "id": 161,
+   "name": "HungerMultiplier",
+   "label": "饥饿度倍数",
+   "desc": "控制玩家消耗食物的速度。更高的数值会增加食物的消耗量。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 1.75,
+     "label": "175%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    }
+   ],
+   "default": 4
+  },
+  {
+   "id": 162,
+   "name": "ThirstMultiplier",
+   "label": "口渴度倍数",
+   "desc": "控制玩家消耗水的速度。更高的数值会增加水的消耗量。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0.0,
+     "label": "无"
+    },
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 1.75,
+     "label": "175%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    }
+   ],
+   "default": 4
+  },
+  {
+   "id": 163,
+   "name": "StackSizeMultiplier",
+   "label": "堆叠上限倍率",
+   "desc": "调整所有可堆叠物品堆叠上限的倍率。最高堆叠上限为 30,000。",
+   "category": "General",
+   "values": [
+    {
+     "raw": 0.25,
+     "label": "25%"
+    },
+    {
+     "raw": 0.5,
+     "label": "50%"
+    },
+    {
+     "raw": 0.75,
+     "label": "75%"
+    },
+    {
+     "raw": 1.0,
+     "label": "100%"
+    },
+    {
+     "raw": 1.25,
+     "label": "125%"
+    },
+    {
+     "raw": 1.5,
+     "label": "150%"
+    },
+    {
+     "raw": 1.75,
+     "label": "175%"
+    },
+    {
+     "raw": 2.0,
+     "label": "200%"
+    },
+    {
+     "raw": 2.5,
+     "label": "250%"
+    },
+    {
+     "raw": 3.0,
+     "label": "300%"
+    },
+    {
+     "raw": 4.0,
+     "label": "400%"
+    },
+    {
+     "raw": 5.0,
+     "label": "500%"
+    }
+   ],
+   "default": 3
+  },
+  {
+   "id": 164,
+   "name": "FullChickenStressEvent",
+   "label": "鸡只压力事件",
+   "desc": "设置手持鸡只的压力达到 100% 时触发的事件。“无”会禁用事件，“随机”则会从下列事件中随机选择一个。\\n\\n鸡脱手 = 鸡会从你手中挣脱。\\n愤怒的鸡 = 鸡会反过来攻击你。\\n丧尸群 = 鸡的压力会引来一群丧尸。\\n杀人鸡群 = 愤怒的鸡会联合起来攻击你。",
+   "category": "Crafting",
+   "values": [
+    {
+     "raw": 0,
+     "label": "无"
+    },
+    {
+     "raw": 1,
+     "label": "随机"
+    },
+    {
+     "raw": 2,
+     "label": "鸡脱手"
+    },
+    {
+     "raw": 3,
+     "label": "愤怒的鸡"
+    },
+    {
+     "raw": 4,
+     "label": "丧尸群"
+    },
+    {
+     "raw": 5,
+     "label": "杀人鸡群"
+    }
+   ],
+   "default": 1
+  }
+ ]
+}

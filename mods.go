@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -30,7 +32,7 @@ const (
 
 // modVersion 面板内置 mod 脚本的版本号，必须与 assets/palworld-ue4ss/mod/scripts/main.lua
 // 里的 MOD_VERSION 一致；不一致会导致「扩展命令 mod 有更新」提示。
-const modVersion = "2026-09-13.11"
+const modVersion = "2026-09-14.2"
 
 func embeddedModVersion() string { return modVersion }
 
@@ -47,6 +49,23 @@ func modFileVersion(path string) string {
 		return ""
 	}
 	return string(m[1])
+}
+
+// 不能用磁盘 main.lua 版本决定队列协议：安装脚本后，旧进程仍在运行旧 Lua。
+func runningModVersion(inst *Instance) string {
+	st := serviceStatus(inst)
+	if st.ActiveState != "active" || st.MainPID <= 0 {
+		return ""
+	}
+	data, err := os.ReadFile(filepath.Join(modQueueDir(inst), "mod-alive.txt"))
+	if err != nil {
+		return ""
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) != 4 || fields[3] != "pid="+strconv.Itoa(st.MainPID) {
+		return "" // 旧版标记或上个进程遗留；必须升级/重启，不能猜测
+	}
+	return fields[2]
 }
 
 func ue4ssAssetDir() string  { return filepath.Join(BaseDir, "data", "ue4ss") }
@@ -119,9 +138,11 @@ type UE4SSStatus struct {
 	Queue        bool            `json:"queue"`         // gspanel-mod 命令队列目录
 	StartPatched bool            `json:"start_patched"` // start.sh 已注入 LD_PRELOAD
 	Binary       UE4SSBinaryInfo `json:"binary"`        // 面板侧二进制
-	ModVersion   string          `json:"mod_version"`   // 实例上 mod 的版本
-	ModLatest    string          `json:"mod_latest"`    // 面板内置 mod 的版本
-	ModStale     bool            `json:"mod_stale"`     // 实例 mod 落后于面板内置（需重装+重启）
+	ModVersion   string          `json:"mod_version"`   // 实例磁盘上的 mod 版本
+	ModRunning   string          `json:"mod_running"`   // 当前进程加载版本（mod-alive + MainPID）
+	NeedsRestart bool            `json:"needs_restart"`
+	ModLatest    string          `json:"mod_latest"` // 面板内置 mod 的版本
+	ModStale     bool            `json:"mod_stale"`  // 实例 mod 落后于面板内置（需重装+重启）
 }
 
 func ue4ssStatus(inst *Instance) UE4SSStatus {
@@ -142,7 +163,9 @@ func ue4ssStatus(inst *Instance) UE4SSStatus {
 	if _, err := os.Stat(modPath); err == nil {
 		st.Mod = true
 		st.ModVersion = modFileVersion(modPath)
-		st.ModStale = st.ModVersion != modVersion
+		st.ModRunning = runningModVersion(inst)
+		st.NeedsRestart = st.ModRunning != st.ModVersion
+		st.ModStale = st.ModVersion != modVersion || st.ModRunning != modVersion
 	}
 	if fi, err := os.Stat(filepath.Join(bin, "gspanel-mod")); err == nil && fi.IsDir() {
 		st.Queue = true
@@ -164,13 +187,7 @@ func palworldAsset(name string) ([]byte, error) {
 }
 
 func writeAssetFile(dst string, data []byte, mode os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
-		return err
-	}
-	if err := os.WriteFile(dst, data, mode); err != nil {
-		return err
-	}
-	return chownToGames(dst)
+	return writeGameAsset(dst, bytes.NewReader(data), mode)
 }
 
 func copyFileAs(src, dst string, mode os.FileMode) error {
@@ -179,24 +196,33 @@ func copyFileAs(src, dst string, mode os.FileMode) error {
 		return err
 	}
 	defer in.Close()
+	return writeGameAsset(dst, in, mode)
+}
+
+// 不截断正在被游戏 mmap 的 .so，也不覆盖硬链接的源文件。新 inode 写完后原子替换。
+func writeGameAsset(dst string, r io.Reader, mode os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
 		return err
 	}
-	out, err := os.Create(dst)
+	out, err := os.CreateTemp(filepath.Dir(dst), ".gspanel-asset-*")
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(out, in); err != nil {
-		_ = out.Close()
+	defer os.Remove(out.Name())
+	if _, err := io.Copy(out, r); err != nil {
+		out.Close()
 		return err
 	}
 	if err := out.Close(); err != nil {
 		return err
 	}
-	if err := os.Chmod(dst, mode); err != nil {
+	if err := os.Chmod(out.Name(), mode); err != nil {
 		return err
 	}
-	return chownToGames(dst)
+	if err := chownToGames(out.Name()); err != nil {
+		return err
+	}
+	return os.Rename(out.Name(), dst)
 }
 
 // installUE4SS 安装/更新实例上的 UE4SS 与 gspanel mod，并重写 start.sh

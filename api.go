@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -74,6 +73,11 @@ func (sv *Server) instanceView(inst *Instance) map[string]any {
 	if tmpl != nil {
 		view["template_name"] = tmpl.Name
 		view["has_rcon"] = tmpl.RCON != nil
+		view["console_kind"] = ""
+		if tmpl.RCON != nil {
+			view["console_kind"] = tmpl.RCON.Type
+		}
+		view["has_mod_manager"] = tmpl.ModManager != nil
 		view["stop_mode"] = tmpl.StopMode
 		view["console_buttons"] = tmpl.ConsoleButtons
 		var pp []map[string]any
@@ -87,6 +91,7 @@ func (sv *Server) instanceView(inst *Instance) map[string]any {
 		view["public_ports"] = pp
 	}
 	view["has_give_mod"] = hasGiveMod(inst)
+	view["give_kind"] = giveKindOf(inst, tmpl) // "mod"=帕鲁扩展命令 / "telnet"=七日杀控制台 / ""=不支持
 	view["ue4ss"] = ue4ssStatus(inst)
 	return view
 }
@@ -99,49 +104,6 @@ func modQueueDir(inst *Instance) string {
 }
 
 // hasGiveMod：实例是否装了 gspanel 扩展命令 mod（定义在 mods.go）
-
-var modCmdMu sync.Mutex
-
-// runModVerb 通过文件队列执行一条 mod 命令并等待结果。
-// 面板所有 mod 命令共用一个队列，必须串行（modCmdMu）。
-func (sv *Server) runModVerb(inst *Instance, verb string, args []string, timeout time.Duration) (bool, string, error) {
-	dir := modQueueDir(inst)
-	if err := mkdirForGames(dir); err != nil {
-		return false, "", err
-	}
-	modCmdMu.Lock()
-	defer modCmdMu.Unlock()
-	resPath := dir + "/res.txt"
-	_ = os.Remove(resPath)
-	content := verb + "\n"
-	if len(args) > 0 {
-		content += strings.Join(args, "\n") + "\n"
-	}
-	tmp := dir + "/cmd.txt.tmp"
-	if err := os.WriteFile(tmp, []byte(content), 0644); err != nil {
-		return false, "", err
-	}
-	if err := chownToGames(tmp); err != nil {
-		return false, "", err
-	}
-	if err := os.Rename(tmp, dir+"/cmd.txt"); err != nil {
-		return false, "", err
-	}
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if data, err := os.ReadFile(resPath); err == nil && len(data) > 0 {
-			txt := strings.TrimSpace(string(data))
-			lines := strings.SplitN(txt, "\n", 2)
-			msg := ""
-			if len(lines) > 1 {
-				msg = strings.TrimSpace(lines[1])
-			}
-			return lines[0] == "OK", msg, nil
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
-	return false, "", fmt.Errorf("mod 未在 %s 内响应（游戏是否在运行？）", timeout)
-}
 
 func (sv *Server) handleModCommand(w http.ResponseWriter, r *http.Request) {
 	inst := sv.getInstance(w, r)
@@ -159,23 +121,119 @@ func (sv *Server) handleModCommand(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	switch req.Verb {
-	case "who", "give", "giveexp", "whojson", "hello":
-	default:
-		jsonError(w, http.StatusBadRequest, "不支持的命令: "+req.Verb)
+	if err := validateModCommand(req.Verb, req.Args); err != nil {
+		jsonError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	for _, a := range req.Args {
-		if strings.ContainsAny(a, "\r\n") {
-			jsonError(w, http.StatusBadRequest, "参数不能包含换行")
+	if req.Verb == "give" {
+		db, err := loadItemDB(inst)
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		found := false
+		for _, it := range db.Items {
+			if it.ID == req.Args[1] {
+				found = true
+				break
+			}
+		}
+		if !found {
+			jsonError(w, http.StatusBadRequest, "物品 ID 不在物品库中，请从列表选择或刷新物品库")
 			return
 		}
 	}
-	ok, msg, err := sv.runModVerb(inst, req.Verb, req.Args, 8*time.Second)
+	ok, msg, err := sv.runModVerb(inst, req.Verb, req.Args, 10*time.Second)
 	if err != nil {
 		jsonError(w, http.StatusGatewayTimeout, err.Error())
 		return
 	}
+	if req.Verb == "give" || req.Verb == "giveexp" {
+		sv.events.Add(inst.Name, "mod-command", "%s %v：ok=%t %s", req.Verb, req.Args, ok, msg)
+	}
+	jsonOK(w, map[string]any{"ok": ok, "message": msg})
+}
+
+// handleGive POST /api/instances/{name}/give  {player, item, count, quality}
+// 「给物品」对话框的统一入口：帕鲁走扩展命令 mod，七日杀走 telnet `give`（掉在玩家面前）
+func (sv *Server) handleGive(w http.ResponseWriter, r *http.Request) {
+	inst := sv.getInstance(w, r)
+	if inst == nil {
+		return
+	}
+	tmpl := sv.templateOf(inst)
+	kind := giveKindOf(inst, tmpl)
+	if kind == "" {
+		jsonError(w, http.StatusBadRequest, "该游戏不支持给物品")
+		return
+	}
+	var req struct {
+		Player  string `json:"player"`
+		Item    string `json:"item"`
+		Count   int    `json:"count"`
+		Quality int    `json:"quality"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	req.Player = strings.TrimSpace(req.Player)
+	if req.Player == "" || len(req.Player) > 64 || strings.ContainsAny(req.Player, "\r\n\x00") {
+		jsonError(w, http.StatusBadRequest, "玩家名不合法")
+		return
+	}
+	if req.Count < 1 || req.Count > 10000 {
+		jsonError(w, http.StatusBadRequest, "数量必须是 1～10000 的整数")
+		return
+	}
+	if req.Quality < 0 || req.Quality > 6 {
+		jsonError(w, http.StatusBadRequest, "品质必须是 1～6（或留空）")
+		return
+	}
+	if req.Item == "" || strings.ContainsAny(req.Item, " \r\n\x00") {
+		jsonError(w, http.StatusBadRequest, "物品 ID 不合法")
+		return
+	}
+	// 物品 ID 必须来自物品库（防手滑拼错/注入）
+	db, err := itemDBOf(inst, tmpl)
+	if err != nil {
+		jsonError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	found := false
+	for _, it := range db.Items {
+		if it.ID == req.Item {
+			found = true
+			break
+		}
+	}
+	if !found {
+		jsonError(w, http.StatusBadRequest, "物品 ID 不在物品库中，请从列表选择")
+		return
+	}
+
+	ok := false
+	msg := ""
+	switch kind {
+	case "mod":
+		ok, msg, err = sv.runModVerb(inst, "give", []string{req.Player, req.Item, strconv.Itoa(req.Count)}, 10*time.Second)
+		if err != nil {
+			jsonError(w, http.StatusGatewayTimeout, err.Error())
+			return
+		}
+	case "telnet":
+		resp, e := dtdGive(inst, tmpl, req.Player, req.Item, req.Count, req.Quality)
+		if e != nil {
+			jsonError(w, http.StatusBadGateway, e.Error())
+			return
+		}
+		msg = strings.TrimSpace(resp)
+		ok = dtdGiveOK(msg)
+	}
+	quality := ""
+	if req.Quality > 0 {
+		quality = fmt.Sprintf(" 品质%d", req.Quality)
+	}
+	sv.events.Add(inst.Name, "give", "给 %s：%s × %d%s — %s", req.Player, req.Item, req.Count, quality, msg)
 	jsonOK(w, map[string]any{"ok": ok, "message": msg})
 }
 
@@ -200,9 +258,25 @@ func (sv *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/settings/password", sv.auth(sv.handleChangePassword))
 	mux.HandleFunc("POST /api/settings/public-ip", sv.auth(sv.handleSetPublicIP))
 	mux.HandleFunc("POST /api/settings/sync-target", sv.auth(sv.handleSetSyncTarget))
+	mux.HandleFunc("POST /api/settings/nexus", sv.auth(sv.handleSetNexusKey))
+	mux.HandleFunc("POST /api/settings/translate", sv.auth(sv.handleSetTranslate))
+
+	mux.HandleFunc("GET /api/nexus/validate", sv.auth(sv.handleNexusValidate))
+	mux.HandleFunc("GET /api/nexus/browse", sv.auth(sv.handleNexusBrowse))
+	mux.HandleFunc("GET /api/nexus/catalog", sv.auth(sv.handleNexusCatalog))
+	mux.HandleFunc("POST /api/nexus/catalog/sync", sv.auth(sv.handleNexusCatalogSync))
+	mux.HandleFunc("GET /api/nexus/filters", sv.auth(sv.handleNexusFilters))
+	mux.HandleFunc("GET /api/nexus/files", sv.auth(sv.handleNexusFiles))
+	mux.HandleFunc("POST /api/translate", sv.auth(sv.handleTranslateText))
 
 	mux.HandleFunc("GET /api/templates", sv.auth(sv.handleTemplates))
 	mux.HandleFunc("POST /api/templates/import", sv.auth(sv.handleImportTemplate))
+
+	// 七日杀沙盒选项（SandboxCode）可视化编辑
+	mux.HandleFunc("GET /api/sandbox/tables/{id}", sv.auth(sv.handleSandboxTable))
+	mux.HandleFunc("POST /api/sandbox/decode", sv.auth(sv.handleSandboxDecode))
+	mux.HandleFunc("POST /api/sandbox/encode", sv.auth(sv.handleSandboxEncode))
+	mux.HandleFunc("GET /api/instances/{name}/sandbox/live", sv.auth(sv.handleSandboxLive))
 
 	mux.HandleFunc("GET /api/instances", sv.auth(sv.handleListInstances))
 	mux.HandleFunc("POST /api/instances", sv.auth(sv.handleCreateInstance))
@@ -224,6 +298,7 @@ func (sv *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/instances/{name}/console/stream", sv.auth(sv.handleConsoleStream))
 	mux.HandleFunc("POST /api/instances/{name}/command", sv.auth(sv.handleCommand))
 	mux.HandleFunc("POST /api/instances/{name}/mod-command", sv.auth(sv.handleModCommand))
+	mux.HandleFunc("POST /api/instances/{name}/give", sv.auth(sv.handleGive))
 	mux.HandleFunc("GET /api/instances/{name}/items", sv.auth(sv.handleItemsList))
 	mux.HandleFunc("POST /api/instances/{name}/items/refresh", sv.auth(sv.handleItemsRefresh))
 	mux.HandleFunc("GET /api/instances/{name}/players", sv.auth(sv.handleModPlayers))
@@ -235,6 +310,14 @@ func (sv *Server) registerRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("GET /api/instances/{name}/config", sv.auth(sv.handleReadConfig))
 	mux.HandleFunc("PUT /api/instances/{name}/config", sv.auth(sv.handleWriteConfig))
+
+	mux.HandleFunc("GET /api/instances/{name}/mods", sv.auth(sv.handleModList))
+	mux.HandleFunc("POST /api/instances/{name}/mods/upload", sv.auth(sv.handleModUpload))
+	mux.HandleFunc("POST /api/instances/{name}/mods/install-url", sv.auth(sv.handleModInstallURL))
+	mux.HandleFunc("POST /api/instances/{name}/mods/install-nexus", sv.auth(sv.handleModInstallNexus))
+	mux.HandleFunc("POST /api/instances/{name}/mods/toggle", sv.auth(sv.handleModToggle))
+	mux.HandleFunc("POST /api/instances/{name}/mods/translate", sv.auth(sv.handleModTranslate))
+	mux.HandleFunc("DELETE /api/instances/{name}/mods", sv.auth(sv.handleModDelete))
 
 	mux.HandleFunc("GET /api/instances/{name}/backups", sv.auth(sv.handleListBackups))
 	mux.HandleFunc("POST /api/instances/{name}/backups", sv.auth(sv.handleCreateBackup))
@@ -308,16 +391,23 @@ func (sv *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 	sv.state.mu.RLock()
 	override := sv.state.PublicIP
 	syncTargets := append([]string(nil), sv.state.SyncTargets...)
+	nexusConfigured := sv.state.NexusAPIKey != ""
+	translateConfigured := sv.state.TranslateBaseURL != ""
+	translateBase, translateModel := sv.state.TranslateBaseURL, sv.state.TranslateModel
 	sv.state.mu.RUnlock()
 	jsonOK(w, map[string]any{
-		"stats":              ReadSystemStats(),
-		"deps":               depsStatus(),
-		"bind_addr":          sv.state.BindAddr(),
-		"base_dir":           BaseDir,
-		"public_ip":          sv.publicIP(),
-		"public_ip_override": override,
-		"sync_targets":       syncTargets,
-		"version":            "1.0.0",
+		"stats":                ReadSystemStats(),
+		"deps":                 depsStatus(),
+		"bind_addr":            sv.state.BindAddr(),
+		"base_dir":             BaseDir,
+		"public_ip":            sv.publicIP(),
+		"public_ip_override":   override,
+		"sync_targets":         syncTargets,
+		"nexus_configured":     nexusConfigured,
+		"translate_configured": translateConfigured,
+		"translate_base_url":   translateBase,
+		"translate_model":      translateModel,
+		"version":              "1.0.0",
 	})
 }
 
@@ -770,8 +860,8 @@ func (sv *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tmpl := sv.templateOf(inst)
-	if tmpl.RCON == nil {
-		jsonError(w, http.StatusBadRequest, "该游戏模板不支持 RCON")
+	if tmpl.RCON == nil && tmpl.RestAPI == nil {
+		jsonError(w, http.StatusBadRequest, "该游戏模板不支持控制台命令")
 		return
 	}
 	var req struct {
@@ -779,10 +869,6 @@ func (sv *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 	}
 	if !decodeJSON(w, r, &req) || req.Command == "" {
 		jsonError(w, http.StatusBadRequest, "命令不能为空")
-		return
-	}
-	if inst.AdminPassword == "" {
-		jsonError(w, http.StatusBadRequest, "实例未配置管理员密码，无法使用 RCON")
 		return
 	}
 	// 模板声明了 REST 映射的命令优先走 REST API（Palworld 等游戏 RCON 会丢响应）
@@ -804,6 +890,24 @@ func (sv *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	// telnet 控制台（七日杀等）：端口/密码从配置文件读，连本机回环执行
+	if tmpl.RCON != nil && tmpl.RCON.Type == "telnet" {
+		resp, err := telnetExecConfig(inst, tmpl, req.Command)
+		if err != nil {
+			jsonError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		jsonOK(w, map[string]any{"response": resp})
+		return
+	}
+	if tmpl.RCON == nil {
+		jsonError(w, http.StatusBadRequest, "该命令没有可用的执行通道")
+		return
+	}
+	if inst.AdminPassword == "" {
+		jsonError(w, http.StatusBadRequest, "实例未配置管理员密码，无法使用 RCON")
+		return
+	}
 	addr := fmt.Sprintf("127.0.0.1:%d", inst.Ports[tmpl.RCON.PortKey])
 	resp, err := RconExec(addr, inst.AdminPassword, req.Command)
 	if err != nil {
@@ -816,12 +920,7 @@ func (sv *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 // ---------- 配置文件 ----------
 
 func (sv *Server) findConfigSpec(tmpl *GameTemplate, path string) *ConfigSpec {
-	for i := range tmpl.Configs {
-		if tmpl.Configs[i].Path == path {
-			return &tmpl.Configs[i]
-		}
-	}
-	return nil
+	return findConfigSpecOf(tmpl, path)
 }
 
 func (sv *Server) handleReadConfig(w http.ResponseWriter, r *http.Request) {

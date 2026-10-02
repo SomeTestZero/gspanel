@@ -19,35 +19,44 @@ BIN="$INST/Pal/Binaries/Linux"
 [ -f "$SO" ] || { echo "找不到 libUE4SS.so: $SO（先跑 build-ue4ss.sh）"; exit 1; }
 [ -f "$ASSETS/mod/scripts/main.lua" ] || { echo "找不到内置资产: $ASSETS（请在 gspanel 仓库根目录执行）"; exit 1; }
 
+# 原子替换，不能 cp 截断正在运行的 mmap .so，也不能修改硬链接测试副本的源文件。
+copy_asset() {
+  local tmp
+  tmp=$(mktemp "$(dirname "$2")/.gspanel-asset.XXXXXX")
+  install -m "${3:-644}" -o games -g games "$1" "$tmp"
+  mv -f "$tmp" "$2"
+}
+
 echo "== 1/4 备份 start.sh（只备份一次）"
 [ -f "$INST/start.sh.pre-ue4ss" ] || cp -a "$INST/start.sh" "$INST/start.sh.pre-ue4ss"
 
 echo "== 2/4 安装 libUE4SS.so / EH 垫片 / 布局表 / 设置 / mod"
-# Lua 语法必须先验：UE4SS 的语法错误会抛 C++ 异常直接 abort 整个游戏进程
+# Lua 语法必须先验：加载失败会使扩展功能不可用；旧 EH 运行时还可能崩溃
 if command -v luac5.4 >/dev/null; then
   luac5.4 -p "$ASSETS/mod/scripts/main.lua" || { echo "mod 有 Lua 语法错误，已中止"; exit 1; }
 fi
-cp "$SO" "$BIN/libUE4SS.so"
+copy_asset "$SO" "$BIN/libUE4SS.so" 755
 # __gxx_personality_v0 拦截垫片：libsteam_api.so 导出坏的 personality 抢占进程级
 # 符号解析，任何 C++ 异常 unwind 都会 abort 游戏进程；垫片把它转发回系统 libstdc++。
 # 须排在 LD_PRELOAD 第一位（先于 libUE4SS.so）。见 tools/palworld-ue4ss/shim-eh/
 if [ -f "$ASSETS/libgxxfix.so" ]; then
-  cp "$ASSETS/libgxxfix.so" "$BIN/libgxxfix.so"
+  copy_asset "$ASSETS/libgxxfix.so" "$BIN/libgxxfix.so" 755
 else
   echo "警告: 缺少 $ASSETS/libgxxfix.so（可用 tools/palworld-ue4ss/shim-eh/build.sh 构建）"
 fi
-cp "$ASSETS/layouts/MemberVariableLayout.ini" "$BIN/MemberVariableLayout.ini"
-cp "$ASSETS/layouts/VTableLayout.ini" "$BIN/VTableLayout.ini"
-cp "$ASSETS/UE4SS-settings.ini" "$BIN/UE4SS-settings.ini"
+copy_asset "$ASSETS/layouts/MemberVariableLayout.ini" "$BIN/MemberVariableLayout.ini"
+copy_asset "$ASSETS/layouts/VTableLayout.ini" "$BIN/VTableLayout.ini"
+copy_asset "$ASSETS/UE4SS-settings.ini" "$BIN/UE4SS-settings.ini"
 # 实例根也放一份（UE4SS 的工作目录兼容）
-cp "$ASSETS/layouts/MemberVariableLayout.ini" "$INST/MemberVariableLayout.ini"
-cp "$ASSETS/layouts/VTableLayout.ini" "$INST/VTableLayout.ini"
+copy_asset "$ASSETS/layouts/MemberVariableLayout.ini" "$INST/MemberVariableLayout.ini"
+copy_asset "$ASSETS/layouts/VTableLayout.ini" "$INST/VTableLayout.ini"
 mkdir -p "$BIN/Mods/gspanel/scripts" "$BIN/gspanel-mod"
-cp "$ASSETS/mod/scripts/main.lua" "$BIN/Mods/gspanel/scripts/main.lua"
-printf 'gspanel : 1\n' > "$BIN/Mods/mods.txt"
+copy_asset "$ASSETS/mod/scripts/main.lua" "$BIN/Mods/gspanel/scripts/main.lua"
+copy_asset "$ASSETS/mods.txt" "$BIN/Mods/mods.txt"
 
 echo "== 3/4 生成 start.sh（LD_PRELOAD 只对游戏二进制生效，绝不能进 shell）"
-cat > "$INST/start.sh" <<'EOF'
+START_TMP=$(mktemp "$INST/.start.XXXXXX")
+cat > "$START_TMP" <<'EOF'
 #!/bin/bash
 # 由 gspanel / tools/palworld-ue4ss 安装的 UE4SS 启动脚本
 # LD_PRELOAD 只对游戏二进制生效；如果让它进入 bash/PalServer.sh，会因 UE4SS 构造器段错误
@@ -61,7 +70,9 @@ PRE="$PWD/Pal/Binaries/Linux/libUE4SS.so"
 [ -f "$PWD/Pal/Binaries/Linux/libgxxfix.so" ] && PRE="$PWD/Pal/Binaries/Linux/libgxxfix.so:$PRE"
 exec env LD_PRELOAD="$PRE" Pal/Binaries/Linux/PalServer-Linux-Shipping Pal -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS
 EOF
-chmod 755 "$INST/start.sh"
+chmod 755 "$START_TMP"
+chown games:games "$START_TMP"
+mv -f "$START_TMP" "$INST/start.sh"
 
 echo "== 4/4 属主改回 games"
 chown -R games:games "$BIN/libUE4SS.so" "$BIN/MemberVariableLayout.ini" "$BIN/VTableLayout.ini" \

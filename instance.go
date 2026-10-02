@@ -155,8 +155,14 @@ func (sv *Server) postInstall(inst *Instance, tmpl *GameTemplate, log io.Writer)
 	if err := writeStartScript(inst, tmpl); err != nil {
 		return fmt.Errorf("生成启动脚本: %w", err)
 	}
+	if tmpl.RCON != nil && tmpl.RCON.Type == "telnet" {
+		ensureTelnetEnabled(inst, tmpl, log)
+	}
 	if err := writeUnit(inst, tmpl); err != nil {
 		return fmt.Errorf("生成 systemd unit: %w", err)
+	}
+	if err := ensureSteamSDK64(inst); err != nil {
+		fmt.Fprintf(log, "创建 ~/.steam/sdk64/steamclient.so 软链失败: %v（Steam 玩家可能连不进）\n", err)
 	}
 	if err := enableUnit(inst); err != nil {
 		fmt.Fprintf(log, "设置开机自启失败: %v\n", err)

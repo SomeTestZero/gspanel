@@ -113,3 +113,25 @@ func installDeps(ctx context.Context, log io.Writer) error {
 	fmt.Fprintln(log, "依赖安装完成")
 	return nil
 }
+
+// ensureSteamSDK64 把 $GamesHome/.steam/sdk64/steamclient.so 指向实例自带的 steamclient.so。
+// Steamworks.GameServer 固定从 ~/.steam/sdk64/steamclient.so 加载 steamclient（unit 里 HOME=/home/games），
+// 缺这个软链时 GameServer.Init 失败（"Could not initialize GameServer"），Steam 玩家连不进。
+// 已存在则不动（steamclient 各实例同源，指向哪个实例都行）；游戏不带 steamclient.so 的模板自动跳过。
+func ensureSteamSDK64(inst *Instance) error {
+	src := filepath.Join(inst.Dir, "steamclient.so")
+	if _, err := os.Stat(src); err != nil {
+		return nil
+	}
+	dir := filepath.Join(GamesHome, ".steam", "sdk64")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	_ = chownToGames(filepath.Join(GamesHome, ".steam"))
+	_ = chownToGames(dir)
+	link := filepath.Join(dir, "steamclient.so")
+	if _, err := os.Lstat(link); err == nil {
+		return nil
+	}
+	return os.Symlink(src, link)
+}

@@ -1,70 +1,70 @@
 #!/bin/bash
-# 在「硬链接测试副本」上试验 libUE4SS.so，不影响生产实例。
-# 用法: sudo ./test-ue4ss.sh <生产实例目录> <libUE4SS.so> [测试端口基数]
-#   例: sudo ./test-ue4ss.sh /home/games/instances/palworld-1 /tmp/ue4ss/libUE4SS.so 8300
-# 说明:
-#   1) 用 cp -al 硬链接复制实例（秒级、几乎不占空间），随后断开存档/日志/配置的硬链接，
-#      测试服写盘不会影响生产存档；
-#   2) 游戏/RCON/REST 端口改为 <基数+11>/<基数+76>/<基数+12>（默认 8311/2576/8312 会冲突时自行调整）;
-#   3) 启动 60 秒后自动杀掉测试进程（可用 RUN_SECS 覆盖）。
-# 注意：测试副本会占用一份游戏进程内存（约 1~2GB），本机只有 3.6G 内存时
-#       建议挑玩家离线时执行，并在 free 掉到 300MB 以下时手动中止。
+# 隔离试跑：只硬链接只读游戏大文件；整个 Pal/Saved、日志、mod/so/布局均独立。
+# 用法: sudo NATIVE_CHECK=1 RUN_SECS=180 ./test-ue4ss.sh <实例目录> <libUE4SS.so> [端口基数]
+# 不启停生产实例。通过 transient systemd unit 限制测试服内存/CPU，退出必停止。
 set -euo pipefail
-SRC=${1:?生产实例目录}
-UE4SS_SO=${2:?libUE4SS.so 路径}
-BASE=${3:-8300}
-RUN_SECS=${RUN_SECS:-60}
-DST=/home/games/test-ue4ss
-
-[ "$(id -u)" = 0 ] || { echo "需要 root"; exit 1; }
-[ -d "$SRC" ] || { echo "实例目录不存在: $SRC"; exit 1; }
-
-echo "== 1/4 硬链接复制到 $DST"
-rm -rf "$DST"; mkdir -p "$DST"
-cp -al "$SRC/." "$DST/"
-# 断开可变数据
-rm -rf "$DST/Pal/Saved/SaveGames" "$DST/logs"
-rm -f "$DST/Pal/Saved/Config/LinuxServer/PalWorldSettings.ini"
-cp "$SRC/Pal/Saved/Config/LinuxServer/PalWorldSettings.ini" "$DST/Pal/Saved/Config/LinuxServer/PalWorldSettings.ini"
-mkdir -p "$DST/logs"
-sed -i "s/PublicPort=[0-9]*/PublicPort=$((BASE+11))/; s/RCONPort=[0-9]*/RCONPort=$((BASE+76))/; s/RESTAPIPort=[0-9]*/RESTAPIPort=$((BASE+12))/; s/ServerName=\"[^\"]*\"/ServerName=\"UE4SS-TEST\"/" \
-  "$DST/Pal/Saved/Config/LinuxServer/PalWorldSettings.ini"
-
-echo "== 2/4 安装 UE4SS + 垫片 + 新 libstdc++ + mod"
-BIN="$DST/Pal/Binaries/Linux"; RT="$BIN/gspanel-runtime"
-mkdir -p "$BIN/Mods/gspanel/scripts" "$RT"
-cp "$UE4SS_SO" "$BIN/libUE4SS.so"
-cp "$(dirname "$0")/shim/libglibc238shim.so" "$RT/" 2>/dev/null || { bash "$(dirname "$0")/shim/build.sh"; cp "$(dirname "$0")/shim/libglibc238shim.so" "$RT/"; }
+SRC=$(realpath "${1:?生产实例目录}")
+UE4SS_SO=$(realpath "${2:?libUE4SS.so 路径}")
+BASE=${3:-18300}
+RUN_SECS=${RUN_SECS:-180}
 ASSETS="$(cd "$(dirname "$0")/../.." && pwd)/assets/palworld-ue4ss"
-cp "$ASSETS/mod/scripts/main.lua" "$BIN/Mods/gspanel/scripts/main.lua"
-cp "$ASSETS/mods.txt" "$BIN/Mods/mods.txt"
-cp "$ASSETS/UE4SS-settings.ini" "$BIN/UE4SS-settings.ini"
-cp "$ASSETS/layouts/MemberVariableLayout.ini" "$BIN/MemberVariableLayout.ini" 2>/dev/null || true
-cp "$ASSETS/layouts/VTableLayout.ini" "$BIN/VTableLayout.ini" 2>/dev/null || true
-# 新 libstdc++：从 PPA deb 解出来放这里（见 README），没有就先只用系统版本
-if [ -f "${STDCPP_SO:-}" ]; then cp "$STDCPP_SO" "$RT/libstdc++.so.6"; fi
-chown -R games:games "$DST"
+[ "$(id -u)" = 0 ] || { echo "需要 root"; exit 1; }
+[[ "$BASE" =~ ^[0-9]+$ && "$RUN_SECS" =~ ^[0-9]+$ ]] || exit 1
+[ "$BASE" -ge 1024 ] && [ "$BASE" -le 65400 ] || exit 1
+[ -f "$SRC/Pal/Binaries/Linux/PalServer-Linux-Shipping" ] && [ -f "$UE4SS_SO" ] || exit 1
+DST=$(mktemp -d /home/games/gsp-ue4ss-test.XXXXXX)
+UNIT="gsp-ue4ss-test-$(basename "$DST" | cut -d. -f2)"
+cleanup() { systemctl stop "$UNIT.service" 2>/dev/null || true; }
+trap cleanup EXIT INT TERM
+printf 'TEST_DIR=%s\nTEST_UNIT=%s\n' "$DST" "$UNIT"
 
-echo "== 3/4 启动测试服（$RUN_SECS 秒后自动停止）"
-LOG=/tmp/ue4ss-test.log; : > "$LOG"
-if [ ! -f "$RT/libstdc++.so.6" ]; then
-  echo "!! 警告：$RT 下没有新 libstdc++（GLIBCXX_3.4.31/32），libUE4SS 很可能加载失败；"
-  echo "   下载 jammy 版 PPA deb 并用 STDCPP_SO=... 指定（见 README）"
+# 旧脚本 cp -al 后直接 cp 覆盖 so/mod，会写坏生产硬链接！先 unlink 全部可变文件。
+cp -al "$SRC/." "$DST/"
+rm -rf "$DST/Pal/Saved" "$DST/logs" "$DST/steamapps" "$DST/Engine/Saved"
+rm -f "$DST/start.sh" "$DST/start.sh.pre-ue4ss" "$DST/MemberVariableLayout.ini" "$DST/VTableLayout.ini"
+BIN="$DST/Pal/Binaries/Linux"
+rm -rf "$BIN/Mods" "$BIN/gspanel-mod" "$BIN/gspanel-runtime"
+rm -f "$BIN/libUE4SS.so" "$BIN/libgxxfix.so" "$BIN/UE4SS-settings.ini" \
+  "$BIN/MemberVariableLayout.ini" "$BIN/VTableLayout.ini" "$BIN/UE4SS.log" "$BIN/steam_appid.txt"
+mkdir -p "$BIN/Mods/gspanel/scripts" "$BIN/gspanel-mod" "$DST/Pal/Saved/Config/LinuxServer" "$DST/logs"
+# 干净测试世界，不复制生产存档/密码，也不向公网发布。
+printf '[/Script/Pal.PalGameWorldSettings]\nOptionSettings=(ServerName="GSPanel-UE4SS-TEST",ServerPassword="isolated-local-test",AdminPassword="isolated-test-admin",PublicPort=%d,RCONEnabled=False,RESTAPIEnabled=True,RESTAPIPort=%d,bIsUseBackupSaveData=False)\n' \
+  "$((BASE+11))" "$((BASE+12))" > "$DST/Pal/Saved/Config/LinuxServer/PalWorldSettings.ini"
+install -m 755 "$UE4SS_SO" "$BIN/libUE4SS.so"
+install -m 755 "$ASSETS/libgxxfix.so" "$BIN/libgxxfix.so"
+install -m 644 "$ASSETS/mod/scripts/main.lua" "$BIN/Mods/gspanel/scripts/main.lua"
+install -m 644 "$ASSETS/mods.txt" "$BIN/Mods/mods.txt"
+install -m 644 "$ASSETS/UE4SS-settings.ini" "$BIN/UE4SS-settings.ini"
+for f in MemberVariableLayout.ini VTableLayout.ini; do
+  install -m 644 "$ASSETS/layouts/$f" "$BIN/$f"
+  install -m 644 "$ASSETS/layouts/$f" "$DST/$f"
+done
+printf '2394010\n' > "$BIN/steam_appid.txt"
+# 只 chown 新建文件，别对仍链接生产文件的整棵树递归 chown/chmod。
+find "$DST" -type d -exec chown games:games {} +
+find "$DST" -type f -links 1 -exec chown games:games {} +
+luac5.4 -p "$BIN/Mods/gspanel/scripts/main.lua"
+
+systemd-run --unit="$UNIT" --collect --uid=games --working-directory="$DST" \
+  --property="RuntimeMaxSec=${RUN_SECS}s" --property=TimeoutStopSec=20 \
+  --property=MemoryMax=1600M --property=MemorySwapMax=2G --property=CPUQuota=100% \
+  --property="StandardOutput=append:$DST/logs/console.log" \
+  --property="StandardError=append:$DST/logs/console.log" \
+  --property=IPAddressDeny=any --property=IPAddressAllow=localhost \
+  /usr/bin/env HOME=/home/games "LD_PRELOAD=$BIN/libgxxfix.so:$BIN/libUE4SS.so" \
+  "$BIN/PalServer-Linux-Shipping" Pal -port="$((BASE+11))" -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS
+if [ "${NATIVE_CHECK:-0}" = 1 ]; then
+  # games 不一定能遍历面板用户的 home，复制测试驱动到它可读的隔离目录。
+  install -m 644 -o games -g games "$(dirname "$0")/test-native.py" "$DST/native-check.py"
+  sudo -u games python3 "$DST/native-check.py" "$DST"
+  echo "PASS: 隔离原生回归通过"
+  exit 0
 fi
-# LD_PRELOAD 只随最终 exec 生效；不要让 bash/PalServer.sh 吃到（它们不是 UE 进程，会段错误）
-setsid sudo -u games bash -c "cd '$DST' && exec env HOME=/home/games LD_LIBRARY_PATH='$RT' LD_PRELOAD='$RT/libglibc238shim.so:$BIN/libUE4SS.so' ./Pal/Binaries/Linux/PalServer-Linux-Shipping Pal -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS" >>"$LOG" 2>&1 &
-
-for i in $(seq 1 "$RUN_SECS"); do
+# 本脚本由 bg_run 管理；等待有上限，Ctrl-C/超时都会清理该 unit。
+for ((i=0; i<RUN_SECS; i++)); do
   sleep 1
-  if grep -qaE '\[gspanel\]|\[UE4SS\]' "$LOG"; then break; fi
-  avail=$(free -m | awk '/Mem:/{print $7}')
-  [ "$avail" -lt 250 ] && { echo "可用内存 <250MB，提前停止"; break; }
+  systemctl is-active --quiet "$UNIT.service" || break
 done
-
-echo "== 4/4 停止测试进程 & 输出摘要"
-for p in $(pgrep -f 'PalServer-Linux-Shipping' || true); do
-  [ "$(readlink /proc/$p/cwd 2>/dev/null || true)" = "$DST" ] && kill -9 "$p" && echo "killed $p"
-done
-echo "--- UE4SS/gspanel 日志:"; grep -aE '\[UE4SS\]|\[gspanel\]' "$LOG" | head -40 || true
-echo "--- 完整日志: $LOG"
-echo "--- 清理测试副本: rm -rf $DST"
+cleanup
+printf '测试结束；独立日志/目录保留在 %s（确认无需排查后可删除）。\n' "$DST"
+grep -aE '\[gspanel\]|Linux: UObject::ProcessEvent|SIG|segfault|Fatal' "$DST/logs/console.log" | tail -40 || true

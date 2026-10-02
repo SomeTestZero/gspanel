@@ -327,13 +327,16 @@ async function renderInstance(name, tab, seq) {
   S.instances = (await api("/api/instances"));
   const t = tmpl.find(x => x.id === inst.template);
   const running = inst.status && inst.status.active_state === "active";
-  const tabs = [["console", "控制台"], ["config", "配置"], ["backups", "备份"], ["schedules", "计划任务"], ["settings", "设置"]];
+  const tabs = [["console", "控制台"], ["config", "配置"]];
+  if (inst.has_mod_manager) tabs.push(["mods", "Mod 管理"]);
+  tabs.push(["backups", "备份"], ["schedules", "计划任务"], ["settings", "设置"]);
   const tabHtml = tabs.map(([k, label]) =>
     `<div class="tab ${tab === k ? "active" : ""}" onclick="nav('instance','${esc(name)}/${k}')">${label}</div>`).join("");
 
   let body = "";
   if (tab === "console") body = consoleTab(inst, running);
   else if (tab === "config") body = `<div id="tabBody" class="card">加载中...</div>`;
+  else if (tab === "mods") body = `<div id="tabBody" class="card">加载中...</div>`;
   else if (tab === "backups") body = `<div id="tabBody" class="card">加载中...</div>`;
   else if (tab === "schedules") body = `<div id="tabBody" class="card">加载中...</div>`;
   else if (tab === "settings") body = settingsTab(inst, t);
@@ -369,7 +372,7 @@ async function renderInstance(name, tab, seq) {
     } catch (e) { toast(e.message, false); }
   });
   bind("iNewWorld", async () => {
-    if (!confirm("警告：创建新世界将删除当前世界存档和所有玩家数据！\n\n流程：停止服务器 → 自动备份 → 删除世界存档 → 重启生成新世界。\n旧世界可在「备份」页恢复。\n\n确定继续吗？")) return;
+    if (!confirm("警告：创建新世界将删除当前世界存档和所有玩家数据！\n\n流程：停止服务器 → 自动备份 → 删除世界存档 → 重启生成新世界。\n旧世界可在「备份」页恢复。任务日志会列出实际删除的存档路径。\n\n确定继续吗？")) return;
     try {
       const task = await api(`/api/instances/${name}/new-world`, { method: "POST" });
       openTaskModal(task.id);
@@ -378,6 +381,7 @@ async function renderInstance(name, tab, seq) {
 
   if (tab === "console") initConsole(inst, running);
   if (tab === "config") initConfigTab(inst, t);
+  if (tab === "mods") initModsTab(inst, t);
   if (tab === "backups") initBackupsTab(inst);
   if (tab === "schedules") initSchedulesTab(inst);
   if (tab === "settings") initSettingsTab(inst, t);
@@ -385,11 +389,14 @@ async function renderInstance(name, tab, seq) {
 
 /* 控制台 */
 function consoleTab(inst, running) {
+  const cmdHint = inst.console_kind === "telnet"
+    ? "输入控制台命令回车发送，如: lp / say 大家好 / saveworld / give 玩家名 物品ID 数量"
+    : "输入 RCON 命令回车发送，如: ShowPlayers / Broadcast xxx / Save / Info";
   return `
   <div class="card">
     <div class="console" id="console"><div class="dim">加载日志...</div></div>
     <div class="cmd-row">
-      <input id="cmdInput" placeholder="${inst.has_rcon ? "输入 RCON 命令回车发送，如: ShowPlayers / Broadcast xxx / Save / Info" : "该游戏不支持 RCON，仅可查看日志"}" ${inst.has_rcon ? "" : "disabled"}>
+      <input id="cmdInput" placeholder="${inst.has_rcon ? cmdHint : "该游戏不支持控制台命令，仅可查看日志"}" ${inst.has_rcon ? "" : "disabled"}>
       <button id="cmdSend" ${inst.has_rcon ? "" : "disabled"}>发送</button>
     </div>
     ${inst.has_rcon ? `<div class="row mt" id="quickRow"><span class="hint">快捷:</span></div>` : ""}
@@ -447,11 +454,11 @@ function initConsole(inst, running) {
       row.appendChild(el);
     });
   }
-  // gspanel 扩展命令（UE4SS mod 文件队列通道；RCON 自定义命令在本游戏不可用）
-  if (inst.has_give_mod && row) {
+  // gspanel 给物品对话框：帕鲁走 UE4SS mod 扩展命令，七日杀走 telnet give
+  if (row && (inst.has_give_mod || inst.give_kind === "telnet")) {
     const row2 = document.createElement("div");
     row2.className = "row mt";
-    row2.innerHTML = '<span class="hint">扩展:</span>';
+    row2.innerHTML = `<span class="hint">${inst.has_give_mod ? "扩展:" : "管理:"}</span>`;
     const addBtn = (label, fn) => {
       const el = document.createElement("button");
       el.className = "small";
@@ -459,10 +466,10 @@ function initConsole(inst, running) {
       el.onclick = fn;
       row2.appendChild(el);
     };
-    addBtn("在线玩家", () => modCmd(inst.name, "who", [], "在线玩家"));
+    if (inst.has_give_mod) addBtn("在线玩家", () => modCmd(inst.name, "who", [], "在线玩家"));
     addBtn("给物品…", () => openGiveItemDialog(inst));
     addBtn("给经验…", () => {
-      const v = prompt("格式: 玩家名/PlayerUID/SteamID 经验值\n例如: some_test0 5000");
+      const v = prompt("格式: 玩家名/PlayerUID 经验值\n例如: some_test0 5000");
       if (!v) return;
       const p = v.trim().split(/\s+/);
       if (p.length < 2) { alert("参数不足（需要 玩家 经验值）"); return; }
@@ -492,11 +499,24 @@ async function sendCommand(name, cmd) {
   } catch (e) { consoleAppend("错误: " + e.message, "cmd-err"); }
 }
 
-/* 走 UE4SS mod 文件队列的扩展命令（给物品/给经验/在线玩家）；返回 {ok,message} 供调用方判断 */
+/* 走 UE4SS mod 文件队列的扩展命令（给经验/在线玩家）；返回 {ok,message} 供调用方判断 */
 async function modCmd(name, verb, args, label) {
   consoleAppend(`> [${label || verb}] ${args.join(" ")}`, "cmd-echo");
   try {
     const r = await api(`/api/instances/${name}/mod-command`, { method: "POST", body: { verb, args } });
+    consoleAppend(r.message || "(无响应)", r.ok ? "cmd-resp" : "cmd-err");
+    return r;
+  } catch (e) {
+    consoleAppend("错误: " + e.message, "cmd-err");
+    throw e;
+  }
+}
+
+/* 给物品（统一入口）：帕鲁走扩展命令 mod，七日杀走 telnet give；返回 {ok,message} */
+async function giveItemApi(name, payload, label) {
+  consoleAppend(`> [${label || "给物品"}] ${payload.player} ${payload.item} ${payload.count}${payload.quality ? " 品质" + payload.quality : ""}`, "cmd-echo");
+  try {
+    const r = await api(`/api/instances/${name}/give`, { method: "POST", body: payload });
     consoleAppend(r.message || "(无响应)", r.ok ? "cmd-resp" : "cmd-err");
     return r;
   } catch (e) {
@@ -513,6 +533,151 @@ async function loadItemDB(inst) {
   return db;
 }
 
+/* ---------- 七日杀沙盒选项编辑器（SandboxCode 逐项可视化编辑） ---------- */
+async function openSandboxEditor(inst, field, currentCode, onApply) {
+  closeModal();
+  const mask = document.createElement("div");
+  mask.className = "modal-mask";
+  mask.id = "modalMask";
+  mask.innerHTML = `
+  <div class="modal sandbox-modal">
+    <h3>沙盒选项编辑器 <span class="hint" id="sbInfo">加载中…</span>
+      <span style="flex:1"></span>
+      <input id="sbSearch" placeholder="搜索选项（名称 / 说明）…" style="width:240px" autocomplete="off">
+    </h3>
+    <div id="sbWarn"></div>
+    <div class="give-line">
+      <button class="small" id="sbLive" title="执行 gso 读取服务器当前实际生效的沙盒选项（最权威的核对手段）">从服务器读取生效值</button>
+      <button class="small" id="sbLoadCode" title="粘贴一段沙盒代码（如社区预设）载入查看/修改">粘贴代码载入…</button>
+      <button class="small" id="sbDefaults">全部恢复默认</button>
+      <label style="display:flex;align-items:center;gap:6px;margin:0"><input type="checkbox" id="sbOnlyChanged" style="width:auto">只看已修改</label>
+      <span class="hint" id="sbStatus" style="margin-left:auto;align-self:center"></span>
+    </div>
+    <div class="sandbox-list" id="sbList"><div class="item-empty">加载中…</div></div>
+    <div class="form-actions">
+      <span class="hint" id="sbCodeBox" style="margin-right:auto;align-self:center"></span>
+      <button id="sbClose">关闭</button>
+      <button class="primary" id="sbApply">生成代码并填入</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mask);
+  const $ = id => mask.querySelector(`#${id}`);
+  const close = () => closeModal();
+  $("sbClose").onclick = close;
+  mask.onclick = e => { if (e.target === mask) close(); };
+
+  const st = { table: null, values: {}, filter: "", onlyChanged: false, encodeTimer: null };
+  const optByName = {};
+  const warn = html => { $("sbWarn").innerHTML = html ? `<div class="warn-box">${html}</div>` : ""; };
+
+  try {
+    st.table = await api(`/api/sandbox/tables/${encodeURIComponent(field.sandbox_options)}`);
+  } catch (e) {
+    $("sbList").innerHTML = `<div class="item-empty">选项表加载失败：${esc(e.message)}</div>`;
+    return;
+  }
+  st.table.options.forEach(o => { optByName[o.name] = o; st.values[o.name] = o.default; });
+  $("sbInfo").textContent = `共 ${st.table.options.length} 项 · ${st.table.source}`;
+
+  function applyValues(named) {
+    st.table.options.forEach(o => st.values[o.name] = o.default);
+    Object.entries(named || {}).forEach(([name, idx]) => { if (name in optByName) st.values[name] = idx; });
+  }
+  async function loadCode(code, srcLabel) {
+    try {
+      const r = await api("/api/sandbox/decode", { method: "POST", body: { table: st.table.id, code } });
+      applyValues(r.values);
+      warn("");
+      $("sbStatus").textContent = `${srcLabel}代码已载入，含 ${r.changed.length} 项非默认设置`;
+      render();
+    } catch (e) {
+      warn(`代码载入失败：${esc(e.message)}（已按全默认显示）`);
+    }
+  }
+
+  function render() {
+    const f = st.filter.trim().toLowerCase();
+    let shown = 0;
+    const html = st.table.categories.map(c => {
+      const rows = st.table.options.filter(o => {
+        if (o.category !== c.key) return false;
+        const changed = st.values[o.name] !== o.default;
+        if (st.onlyChanged && !changed) return false;
+        if (!f) return true;
+        return (o.label + " " + o.name + " " + (o.desc || "")).toLowerCase().includes(f);
+      });
+      if (!rows.length) return "";
+      shown += rows.length;
+      const rowsHtml = rows.map(o => {
+        const idx = st.values[o.name];
+        const changed = idx !== o.default;
+        return `<div class="sb-row${changed ? " changed" : ""}">
+          <div class="sb-label" title="${esc(o.desc || o.label)}">${esc(o.label)}${changed ? ' <span class="sb-chg">已改</span>' : ""} <span class="mono">${esc(o.name)}</span></div>
+          <select data-sb-opt="${esc(o.name)}">${o.values.map((v, i) =>
+            `<option value="${i}" ${i === idx ? "selected" : ""}>${esc(v.label)}${i === o.default ? "（默认）" : ""}</option>`).join("")}</select>
+        </div>`;
+      }).join("");
+      return `<details class="cfg-group" open><summary>${esc(c.label)}<span class="hint">（${rows.length} 项）</span></summary><div class="sb-rows">${rowsHtml}</div></details>`;
+    }).join("");
+    $("sbList").innerHTML = shown ? html : `<div class="item-empty">没有匹配的选项</div>`;
+  }
+
+  async function updatePreview() {
+    try {
+      const r = await api("/api/sandbox/encode", { method: "POST", body: { table: st.table.id, values: st.values } });
+      $("sbCodeBox").innerHTML = `代码：<span class="mono">${esc(r.code)}</span>`;
+    } catch (e) {
+      $("sbCodeBox").textContent = "编码失败：" + e.message;
+    }
+  }
+  function schedulePreview() {
+    clearTimeout(st.encodeTimer);
+    st.encodeTimer = setTimeout(updatePreview, 250);
+  }
+  const renderAndPreview = () => { render(); schedulePreview(); };
+  // 改值：事件委托统一处理（重绘 + 刷新代码预览）
+  $("sbList").addEventListener("change", e => {
+    const name = e.target && e.target.dataset && e.target.dataset.sbOpt;
+    if (!name) return;
+    st.values[name] = +e.target.value;
+    render();
+    schedulePreview();
+  });
+
+  $("sbSearch").oninput = e => { st.filter = e.target.value; render(); };
+  $("sbOnlyChanged").onchange = e => { st.onlyChanged = e.target.checked; render(); };
+  $("sbDefaults").onclick = () => { applyValues({}); $("sbStatus").textContent = "已全部恢复默认"; renderAndPreview(); };
+  $("sbLoadCode").onclick = async () => {
+    const code = prompt("粘贴沙盒代码（如社区预设/游戏内复制的代码）：");
+    if (code && code.trim()) await loadCode(code.trim(), "粘贴");
+  };
+  $("sbLive").onclick = async () => {
+    $("sbLive").disabled = true;
+    try {
+      const r = await api(`/api/instances/${inst.name}/sandbox/live?table=${encodeURIComponent(st.table.id)}`);
+      applyValues(r.values);
+      warn("");
+      $("sbStatus").textContent = `已读取服务器当前生效值（代码 ${r.code || "?"}）`;
+      renderAndPreview();
+    } catch (e) {
+      warn(`读取服务器生效值失败：${esc(e.message)}`);
+    }
+    $("sbLive").disabled = false;
+  };
+  $("sbApply").onclick = async () => {
+    try {
+      const r = await api("/api/sandbox/encode", { method: "POST", body: { table: st.table.id, values: st.values } });
+      if (onApply) onApply(r.code);
+      close();
+      toast("已生成沙盒代码填入配置框：点「保存配置」并重启实例后生效");
+    } catch (e) { toast(e.message, false); }
+  };
+
+  await loadCode((currentCode || "").trim() || "A", "配置框");
+  render();
+  updatePreview();
+}
+
 function openGiveItemDialog(inst) {
   closeModal();
   const mask = document.createElement("div");
@@ -522,7 +687,7 @@ function openGiveItemDialog(inst) {
   <div class="modal give-modal">
     <h3>给物品 <span class="hint" id="giveDbInfo">加载物品库…</span>
       <span style="flex:1"></span>
-      <button class="small" id="giveDbRefresh" title="让游戏重新导出物品库（需要游戏运行且已装新版扩展命令）">从游戏刷新物品库</button>
+      <button class="small" id="giveDbRefresh" title="重新读取物品库">刷新物品库</button>
     </h3>
     <div id="giveWarn"></div>
     <div class="give-line">
@@ -530,19 +695,22 @@ function openGiveItemDialog(inst) {
       <button class="small" id="givePlayerRefresh">刷新</button>
     </div>
     <div id="giveManualBox" style="display:none">
-      <label>手动输入玩家名 / PlayerUID / SteamID</label>
-      <input id="givePlayerText" placeholder="玩家名或 SteamID">
+      <label id="giveManualLabel">手动输入完整玩家名 / PlayerUID（同名请用 UID）</label>
+      <input id="givePlayerText" placeholder="完整玩家名或 PlayerUID">
     </div>
     <label>搜索物品（游戏内中文名 / 物品ID）</label>
     <input id="giveSearch" placeholder="例如：木材、帕鲁球、Wood…" autocomplete="off">
     <div class="row mt" id="giveCats"></div>
     <div class="item-list" id="giveList"><div class="item-empty">加载中…</div></div>
     <div class="give-line mt">
-      <div><label>数量</label><input id="giveQty" type="number" min="1" step="1" value="100" style="width:110px"></div>
+      <div><label>数量</label><input id="giveQty" type="number" min="1" max="10000" step="1" value="1" style="width:110px"></div>
       <div class="row" id="giveQtyPresets" style="margin-top:16px"></div>
+      <div id="giveQualityBox" style="display:none"><label>品质（可选）</label>
+        <select id="giveQuality" style="width:96px"><option value="">默认</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option></select></div>
       <div style="flex:1"></div>
       <div class="hint" id="giveSel" style="margin-top:16px"></div>
     </div>
+    <div class="hint" id="giveDropHint" style="display:none">提示：give 会把物品掉在玩家面前，让玩家自行拾取</div>
     <div class="row mt" id="giveRecent"></div>
     <div class="form-actions">
       <span id="giveResult" class="hint" style="margin-right:auto;align-self:center"></span>
@@ -552,12 +720,21 @@ function openGiveItemDialog(inst) {
   </div>`;
   document.body.appendChild(mask);
 
-  const $ = id => document.getElementById(id);
+  const $ = id => mask.querySelector(`#${id}`); // 关闭对话框后的异步响应不碰新弹窗
   const qtyInput = $("giveQty");
+  // 给物品通道：mod=帕鲁 UE4SS 扩展命令；telnet=七日杀控制台 give（掉在玩家面前，可带品质）
+  const giveKind = inst.give_kind || (inst.has_give_mod ? "mod" : "");
+  if (giveKind === "telnet") {
+    $("giveQualityBox").style.display = "";
+    $("giveDropHint").style.display = "";
+    $("giveManualLabel").textContent = "手动输入完整玩家名 / 实体ID";
+    $("giveDbRefresh").textContent = "重新扫描游戏文件";
+    $("giveDbRefresh").title = "重新解析游戏物品表（mod 增删 / 游戏更新后用）";
+  }
   const playerKey = `gspGivePlayer:${inst.name}`;
-  const st = { db: null, items: [], index: {}, catLabels: {}, filter: "", cat: "", selected: null, visible: [], selIdx: -1, dbStale: "", playerErr: "" };
-  const savedQty = parseInt(localStorage.getItem("gspGiveQty") || "", 10);
-  if (savedQty > 0) qtyInput.value = savedQty;
+  const st = { db: null, items: [], index: {}, catLabels: {}, filter: "", cat: "", selected: null, visible: [], selIdx: -1, dbStale: "", playerErr: "", submitting: false, loadingPlayers: false };
+  const savedQty = Number(localStorage.getItem("gspGiveQty"));
+  if (Number.isInteger(savedQty) && savedQty > 0 && savedQty <= 10000) qtyInput.value = savedQty;
 
   const close = () => closeModal();
   $("giveClose").onclick = close;
@@ -567,8 +744,8 @@ function openGiveItemDialog(inst) {
   /* ---- 顶部提示（mod 过旧 / 玩家列表失败 / 物品库过期） ---- */
   function renderWarn() {
     const parts = [];
-    if (inst.ue4ss && inst.ue4ss.mod_stale) {
-      parts.push(`扩展命令 mod 有更新（实例 ${esc(inst.ue4ss.mod_version || "旧版")} → 面板 ${esc(inst.ue4ss.mod_latest || "")}）：在线玩家列表 / 物品库刷新需要新版。` +
+    if (giveKind === "mod" && inst.ue4ss && inst.ue4ss.mod_stale) {
+      parts.push(`扩展命令 mod 有更新（运行中 ${esc(inst.ue4ss.mod_running || "旧版/未启动")} → 面板 ${esc(inst.ue4ss.mod_latest || "")}）：在线玩家列表 / 物品库刷新需要新版。` +
         `<button class="small" id="giveFixMod" style="margin-left:8px">安装并重启实例</button>`);
     }
     if (st.playerErr) parts.push(st.playerErr);
@@ -590,9 +767,12 @@ function openGiveItemDialog(inst) {
   function currentPlayer() {
     const sel = $("givePlayer");
     if (sel && sel.value) return sel.value;
-    return ($("givePlayerText").value || "").trim();
+    return $("giveManualBox").style.display === "none" ? "" : ($("givePlayerText").value || "").trim();
   }
   async function reloadPlayers() {
+    if (st.loadingPlayers || st.submitting) return;
+    st.loadingPlayers = true;
+    updateSubmit();
     const sel = $("givePlayer");
     st.playerErr = "";
     sel.innerHTML = `<option value="">加载中…</option>`;
@@ -603,22 +783,24 @@ function openGiveItemDialog(inst) {
         sel.innerHTML = `<option value="">（当前没有在线玩家）</option>`;
         $("giveManualBox").style.display = "";
       } else {
-        sel.innerHTML = players.map(p => {
-          const v = p.uid || p.steam || p.name;
-          const extra = p.steam ? " · " + p.steam : (p.uid ? " · " + p.uid.slice(0, 8) : "");
-          return `<option value="${esc(v)}">${esc(p.name)}${esc(extra)}</option>`;
+        sel.innerHTML = '<option value="">请选择玩家…</option>' + players.map(p => {
+          const v = p.uid;
+          const extra = v ? (giveKind === "telnet" ? " · 实体 " + v : " · " + v.slice(0, 8)) : "（缺少 ID）";
+          return `<option value="${esc(v || "")}" ${v ? "" : "disabled"}>${esc(p.name)}${esc(extra)}</option>`;
         }).join("");
         $("giveManualBox").style.display = "none";
         const last = localStorage.getItem(playerKey);
-        if (last && players.some(p => (p.uid || p.steam || p.name) === last)) sel.value = last;
-        else localStorage.setItem(playerKey, sel.value);
+        if (last && players.some(p => p.uid === last)) sel.value = last;
       }
     } catch (e) {
       sel.innerHTML = `<option value="">读取失败</option>`;
       $("giveManualBox").style.display = "";
       if (!($("givePlayerText").value || "").trim()) $("givePlayerText").value = localStorage.getItem(playerKey) || "";
-      st.playerErr = `在线玩家列表读取失败：${esc(e.message)}；可手动输入玩家名/UID/SteamID 继续。`;
+      st.playerErr = giveKind === "telnet"
+        ? `在线玩家列表读取失败：${esc(e.message)}；请确认实例在运行且 telnet 控制台可用。`
+        : `在线玩家列表读取失败：${esc(e.message)}；请刷新或更新扩展命令后重试。`;
     }
+    st.loadingPlayers = false;
     renderWarn();
     updateSubmit();
   }
@@ -630,7 +812,7 @@ function openGiveItemDialog(inst) {
     st.catLabels = {};
     st.items.forEach(it => { st.index[it.id] = it; });
     ((st.db.categories) || []).forEach(c => { st.catLabels[c.key] = c.label; });
-    $("giveDbInfo").textContent = `共 ${st.db.total ?? st.items.length} 项 · ${st.db.builtin ? "内置基线" : "游戏导出"}`;
+    $("giveDbInfo").textContent = `共 ${st.db.total ?? st.items.length} 项 · ${st.db.builtin ? "内置基线" : (st.db.source || "游戏导出")}`;
     st.dbStale = st.db.stale
       ? `游戏可能已更新（本地 build ${esc(st.db.local_build_id || "?")} ≠ 物品库 build ${esc(st.db.game_build_id || "?")}），建议点右上角「从游戏刷新物品库」。`
       : "";
@@ -687,7 +869,7 @@ function openGiveItemDialog(inst) {
     st.visible = items.slice(0, 300);
     st.selIdx = st.selected ? st.visible.findIndex(x => x.id === st.selected.id) : -1;
     if (!items.length) {
-      list.innerHTML = `<div class="item-empty">没有匹配的物品${st.db && st.db.builtin ? "；试试点右上角「从游戏刷新物品库」" : ""}</div>`;
+      list.innerHTML = `<div class="item-empty">没有匹配的物品${st.db && st.db.builtin && giveKind === "mod" ? "；试试点右上角「刷新物品库」" : ""}</div>`;
       updateSubmit();
       return;
     }
@@ -757,27 +939,34 @@ function openGiveItemDialog(inst) {
 
   /* ---- 提交 ---- */
   function updateSubmit() {
-    const ok = currentPlayer() && st.selected && parseInt(qtyInput.value, 10) > 0;
+    const qty = Number(qtyInput.value);
+    const ok = !st.submitting && !st.loadingPlayers && currentPlayer() && st.selected && Number.isInteger(qty) && qty >= 1 && qty <= 10000;
     $("giveSubmit").disabled = !ok;
   }
   async function submit() {
+    if (st.submitting || st.loadingPlayers) return;
     const player = currentPlayer();
     const it = st.selected;
-    const qty = parseInt(qtyInput.value, 10);
+    const qty = Number(qtyInput.value);
     const out = $("giveResult");
     if (!player) { out.className = "hint err-text"; out.textContent = "请选择或输入玩家"; return; }
     if (!it) { out.className = "hint err-text"; out.textContent = "请搜索并选择物品"; return; }
-    if (!qty || qty < 1) { out.className = "hint err-text"; out.textContent = "数量需大于 0"; return; }
+    if (!Number.isInteger(qty) || qty < 1 || qty > 10000) { out.className = "hint err-text"; out.textContent = "数量必须是 1～10000 的整数"; return; }
+    const playerLabel = $("givePlayer").value ? $("givePlayer").selectedOptions[0].textContent : player;
+    if (!confirm(`确认给「${playerLabel}」${it.name || it.id} × ${qty}？`)) return;
+    st.submitting = true; // 同时拦截 Enter / 双击物品 / 刷新导致的重复请求
     const btn = $("giveSubmit");
     btn.disabled = true;
     btn.textContent = "给予中…";
     out.className = "hint";
     out.textContent = "";
     try {
-      const r = await modCmd(inst.name, "give", [player, it.id, String(qty)], `给物品 ${it.name || it.id}`);
+      const payload = { player, item: it.id, count: qty };
+      if (giveKind === "telnet" && $("giveQuality").value) payload.quality = Number($("giveQuality").value);
+      const r = await giveItemApi(inst.name, payload, `给物品 ${it.name || it.id}`);
       if (r.ok) {
         out.className = "hint ok-text";
-        out.textContent = `✓ 已给「${it.name || it.id}」× ${qty}`;
+        out.textContent = "✓ " + (r.message || `已给「${it.name || it.id}」× ${qty}`);
         pushRecent(it.id);
         localStorage.setItem("gspGiveQty", String(qty));
         localStorage.setItem(playerKey, player);
@@ -790,6 +979,7 @@ function openGiveItemDialog(inst) {
       out.className = "hint err-text";
       out.textContent = "失败：" + e.message;
     } finally {
+      st.submitting = false;
       btn.textContent = "给物品";
       updateSubmit();
     }
@@ -821,7 +1011,10 @@ function openGiveItemDialog(inst) {
     }
   };
   $("giveDbRefresh").onclick = async () => {
-    if (!confirm("让游戏重新导出全部物品（含中文名）？\n需要游戏正在运行且已装新版扩展命令 mod，通常几秒钟。")) return;
+    const isMod = giveKind === "mod";
+    if (!confirm(isMod
+      ? "让游戏重新导出全部物品 ID（中文名由面板内置库匹配）？\n需要游戏正在运行且已装新版扩展命令 mod，通常几秒钟。"
+      : "重新扫描游戏文件里的物品表（mod 增删 / 游戏更新后用）？")) return;
     const b = $("giveDbRefresh");
     b.disabled = true;
     b.textContent = "刷新中…";
@@ -833,7 +1026,7 @@ function openGiveItemDialog(inst) {
       $("giveWarn").innerHTML = `<div class="warn-box">刷新失败：${esc(e.message)}</div>`;
     } finally {
       b.disabled = false;
-      b.textContent = "从游戏刷新物品库";
+      b.textContent = isMod ? "从游戏刷新物品库" : "重新扫描游戏文件";
     }
   };
 
@@ -843,6 +1036,20 @@ function openGiveItemDialog(inst) {
 }
 
 /* 配置 */
+/* 文本结果浮层（配置页「解码当前值」等用） */
+function showTextOverlay(title, text) {
+  const mask = document.createElement("div");
+  mask.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;display:flex;align-items:center;justify-content:center";
+  const box = document.createElement("div");
+  box.style.cssText = "background:#1b2735;max-width:760px;width:92%;max-height:80vh;overflow:auto;border-radius:8px;padding:16px";
+  box.innerHTML = `<h3 style="margin-top:0">${esc(title)}</h3><pre style="white-space:pre-wrap;font-size:12px">${esc(text)}</pre>
+    <div class="form-actions"><button class="small" id="ovClose">关闭</button></div>`;
+  mask.appendChild(box);
+  mask.onclick = e => { if (e.target === mask) mask.remove(); };
+  box.querySelector("#ovClose").onclick = () => mask.remove();
+  document.body.appendChild(mask);
+}
+
 async function initConfigTab(inst, tmpl) {
   const body = document.getElementById("tabBody");
   const specs = (tmpl && tmpl.configs) || [];
@@ -906,7 +1113,18 @@ async function initConfigTab(inst, tmpl) {
       if (f.min != null || f.max != null) hints.push("范围 " + (f.min ?? "-∞") + " ~ " + (f.max ?? "+∞"));
       if (f.note) hints.push(f.note);
       const hintHtml = hints.length ? `<div class="hint">${esc(hints.join(" · "))}</div>` : "";
-      return `<div><label>${esc(f.label || f.key)} <span class="mono" style="color:#5a6b7d">${esc(f.key)}</span></label>${input}${hintHtml}</div>`;
+      const descHtml = f.desc ? `<div class="hint" style="color:#8fa3b5;white-space:pre-wrap">${esc(f.desc)}</div>` : "";
+      const presetHtml = (f.presets || []).length
+        ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">${f.presets.map((p, i) =>
+            `<button type="button" class="small" data-preset-key="${esc(f.key)}" data-preset-idx="${i}" title="${esc(p.note || p.label)}">${esc(p.label)}</button>`).join("")}</div>`
+        : "";
+      const decodeHtml = f.decode_command
+        ? `<div style="margin-top:6px"><button type="button" class="small" data-decode-cmd="${esc(f.decode_command)}">解码当前值（${esc(f.decode_command)}）</button></div>`
+        : "";
+      const sandboxHtml = f.sandbox_options
+        ? `<div style="margin-top:6px"><button type="button" class="small primary" data-sandbox-key="${esc(f.key)}">沙盒选项编辑器…</button></div>`
+        : "";
+      return `<div><label>${esc(f.label || f.key)} <span class="mono" style="color:#5a6b7d">${esc(f.key)}</span></label>${input}${sandboxHtml}${presetHtml}${descHtml}${hintHtml}${decodeHtml}</div>`;
     };
     // 按 group 折叠分组；未分组的归入「其他」，第一个分组默认展开
     const groups = [];
@@ -923,6 +1141,31 @@ async function initConfigTab(inst, tmpl) {
       <div class="form-actions"><button class="primary" id="cfgSave">保存配置</button>
       <button class="danger" id="cfgReset">恢复默认</button>
       ${restartNowHtml}<span class="hint">未勾选则下次启动生效</span></div>`;
+    // 预设一键填充 + 游戏内解码按钮
+    const byKey = {};
+    data.schema.forEach(f => byKey[f.key] = f);
+    cb.querySelectorAll("[data-preset-key]").forEach(btn => btn.onclick = () => {
+      const f = byKey[btn.dataset.presetKey];
+      const p = (f && f.presets || [])[+btn.dataset.presetIdx];
+      if (!p) return;
+      const input = cb.querySelector(`[data-key="${f.key}"]`);
+      if (input) { input.value = p.value; input.focus(); }
+      toast(`已填充「${p.label}」，保存并重启后生效`);
+    });
+    cb.querySelectorAll("[data-decode-cmd]").forEach(btn => btn.onclick = async () => {
+      btn.disabled = true;
+      try {
+        const r = await api(`/api/instances/${inst.name}/command`, { method: "POST", body: { command: btn.dataset.decodeCmd } });
+        showTextOverlay(`命令 ${btn.dataset.decodeCmd} 输出`, r.response || "(无输出)");
+      } catch (e) { toast(e.message, false); }
+      btn.disabled = false;
+    });
+    // 沙盒选项编辑器（七日杀 SandboxCode）：编辑结果生成代码填回输入框
+    cb.querySelectorAll("[data-sandbox-key]").forEach(btn => btn.onclick = () => {
+      const f = byKey[btn.dataset.sandboxKey];
+      const input = cb.querySelector(`[data-key="${f.key}"]`);
+      openSandboxEditor(inst, f, input ? input.value : "", code => { if (input) input.value = code; });
+    });
     document.getElementById("cfgSave").onclick = async () => {
       const values = {};
       cb.querySelectorAll("[data-key]").forEach(el => values[el.dataset.key] = el.value);
@@ -955,6 +1198,369 @@ async function initConfigTab(inst, tmpl) {
   };
   document.getElementById("cfgSel").onchange = e => load(e.target.value);
   load(specs[0].path);
+}
+
+/* ---------- Mod 管理（七日杀等文件夹式 mod：Mods/<目录>/ModInfo.xml） ---------- */
+async function initModsTab(inst, tmpl) {
+  const body = document.getElementById("tabBody");
+  const load = async () => {
+    let data;
+    try { data = await api(`/api/instances/${inst.name}/mods`); }
+    catch (e) { body.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+    const mods = data.mods || [];
+    const rows = mods.map(m => `
+      <tr>
+        <td><b>${esc(m.name_zh || m.name)}</b>${m.name_zh ? ` <span class="hint">${esc(m.name)}</span>` : ""} <span class="hint mono">${esc(m.dir)}</span>
+          ${(m.description_zh || m.description) ? `<div class="hint">${esc(m.description_zh || m.description)}</div>` : ""}
+          ${m.description_zh && m.description ? `<div class="hint" style="opacity:.55">${esc(m.description)}</div>` : ""}
+          ${m.website ? `<div class="hint"><a href="${esc(m.website)}" target="_blank" rel="noopener">${esc(m.website)}</a></div>` : ""}</td>
+        <td>${esc(m.version || "-")}</td>
+        <td>${esc(m.author || "-")}</td>
+        <td>${fmtBytes(m.size)}</td>
+        <td>${m.enabled ? '<span class="badge green">启用</span>' : '<span class="badge red">禁用</span>'}</td>
+        <td style="white-space:nowrap">
+          <button class="small" data-toggle="${esc(m.dir)}" data-enable="${m.enabled ? "0" : "1"}">${m.enabled ? "禁用" : "启用"}</button>
+          <button class="small danger" data-del="${esc(m.dir)}">删除</button>
+        </td>
+      </tr>`).join("");
+    body.innerHTML = `
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <h3 style="margin:0">Mod 列表（${mods.length}）</h3>
+        <span><button class="small" id="modTranslate">翻译成中文</button>
+        <button class="small" id="modReload">刷新</button></span>
+      </div>
+      ${rows ? `<table class="mt"><tr><th>Mod</th><th>版本</th><th>作者</th><th>大小</th><th>状态</th><th>操作</th></tr>${rows}</table>`
+             : `<div class="empty mt">还没有安装 Mod</div>`}
+      <div class="hint">安装位置 <span class="mono">${esc(data.dir)}/</span>（禁用的移到 <span class="mono">${esc(data.disabled_dir)}/</span>）。
+        安装/启停后需<b>重启服务器</b>生效；客户端需安装同版本 mod 才能进入。支持 .zip / .tar.gz（rar/7z 请先转 zip）。</div>
+      <div class="card mt">
+        <h3>安装 Mod</h3>
+        <div class="form-row">
+          <div><label>上传 zip / tar.gz</label><input type="file" id="modFile" accept=".zip,.tar.gz,.tgz"></div>
+          <div><label>或从直链在线安装（GitHub Release 等）</label><input id="modUrl" class="mono" placeholder="https://github.com/xxx/yyy/releases/download/.../mod.zip"></div>
+        </div>
+        <div class="form-row">
+          <div><label>或粘贴 NexusMods 的 nxm:// 链接（免费账号也能用：下载页「Mod Manager 下载」按钮右键复制链接）</label>
+            <input id="modNxm" class="mono" placeholder="nxm://7daystodie/mods/123/files/456?key=...&expires=..."></div>
+        </div>
+        <div class="form-actions">
+          <button class="primary small" id="modUploadBtn">上传安装</button>
+          <button class="small" id="modUrlBtn">从 URL 安装</button>
+          <button class="small" id="modNxmBtn">按 nxm 链接安装</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Mod 商店（NexusMods 在线浏览）</h3>
+        <div id="nexusBox"></div>
+      </div>`;
+
+    document.getElementById("modReload").onclick = load;
+    document.getElementById("modTranslate").onclick = async () => {
+      const btn = document.getElementById("modTranslate");
+      btn.disabled = true; btn.textContent = "翻译中…";
+      try {
+        const r = await api(`/api/instances/${inst.name}/mods/translate`, { method: "POST" });
+        toast(r.translated ? `已翻译 ${r.translated} 条（结果已缓存）` : "已有翻译，无需重复翻译");
+        load();
+      } catch (e) { toast(e.message, false); btn.disabled = false; btn.textContent = "翻译成中文"; }
+    };
+    body.querySelectorAll("[data-toggle]").forEach(b => b.onclick = async () => {
+      const enable = b.dataset.enable === "1";
+      try {
+        await api(`/api/instances/${inst.name}/mods/toggle`, { method: "POST", body: { name: b.dataset.toggle, enable } });
+        toast(enable ? "已启用，重启服务器后生效" : "已禁用，重启服务器后生效");
+        load();
+      } catch (e) { toast(e.message, false); }
+    });
+    body.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
+      if (!confirm(`删除 Mod「${b.dataset.del}」？文件将从磁盘移除（备份包里还有）`)) return;
+      try { await api(`/api/instances/${inst.name}/mods?name=${encodeURIComponent(b.dataset.del)}`, { method: "DELETE" }); toast("已删除"); load(); }
+      catch (e) { toast(e.message, false); }
+    });
+    const upBtn = document.getElementById("modUploadBtn");
+    upBtn.onclick = async () => {
+      const f = document.getElementById("modFile").files[0];
+      if (!f) { toast("请先选择压缩包", false); return; }
+      const fd = new FormData();
+      fd.append("file", f);
+      upBtn.disabled = true; upBtn.textContent = "上传安装中…";
+      try {
+        const r = await fetch(`/api/instances/${inst.name}/mods/upload`, { method: "POST", credentials: "same-origin", body: fd });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || ("HTTP " + r.status));
+        toast("已安装：" + (d.installed || []).join("、") + ((d.skipped || []).length ? `；⚠ 未识别未安装 ${d.skipped.length} 项：${d.skipped.slice(0, 5).join("、")}${d.skipped.length > 5 ? "…" : ""}` : ""));
+        load();
+      } catch (e) { toast(e.message, false); upBtn.disabled = false; upBtn.textContent = "上传安装"; }
+    };
+    document.getElementById("modUrlBtn").onclick = async () => {
+      const u = document.getElementById("modUrl").value.trim();
+      if (!u) { toast("请输入直链 URL", false); return; }
+      try { const t = await api(`/api/instances/${inst.name}/mods/install-url`, { method: "POST", body: { url: u } }); openTaskModal(t.id, load); }
+      catch (e) { toast(e.message, false); }
+    };
+    document.getElementById("modNxmBtn").onclick = async () => {
+      const nxm = document.getElementById("modNxm").value.trim();
+      if (!nxm) { toast("请粘贴 nxm:// 链接", false); return; }
+      try { const t = await api(`/api/instances/${inst.name}/mods/install-nexus`, { method: "POST", body: { nxm } }); openTaskModal(t.id, load); }
+      catch (e) { toast(e.message, false); }
+    };
+
+    /* ---------- Mod 商店（NexusMods 在线浏览 + 安装） ---------- */
+    const nb = document.getElementById("nexusBox");
+    const nxState = { q: "", sort: "downloads", category: "", side: "", verfilter: "", offset: 0, pageSize: 100, catalog: [], syncedAt: "", premium: null, user: "", gv: "" };
+    const nxSideBadge = s => ({
+      server: '<span class="badge green">服务端</span>',
+      both: '<span class="badge green">双端</span>',
+      client: '<span class="badge" style="background:#274060;color:#9cf">客户端</span>',
+      "client?": '<span class="badge" style="background:#274060;color:#9cf">客户端?</span>',
+    }[s] || '<span class="badge" style="background:#2a3542;color:#8fa3b5">端侧未标注</span>');
+    const nxVerBadge = v => {
+      if (!v) return "";
+      if (v.startsWith("match:")) return ` <span class="badge green">兼容 ${esc(v.slice(6))}</span>`;
+      return ` <span class="badge" style="background:#5b4a1e;color:#fd5">标注 ${esc(v.slice(6))}（请核对）</span>`;
+    };
+    const nxLoadGameVersion = async () => {
+      try {
+        const r = await api(`/api/instances/${inst.name}/command`, { method: "POST", body: { command: "version" } });
+        const m = (r.response || "").match(/Game version:\s*V?\s*(\d+\.\d+(?:\.\d+)?)/i);
+        nxState.gv = m ? m[1] : "";
+      } catch (e) { nxState.gv = ""; }
+    };
+    const nxLoadAccount = async () => {
+      try {
+        const r = await api("/api/nexus/validate");
+        nxState.premium = !!(r.user || {}).is_premium;
+        nxState.user = (r.user || {}).name || "";
+      } catch (e) { nxState.premium = null; nxState.user = e.message; }
+    };
+    const nxAccountHtml = () => {
+      if (nxState.premium === null) return `<span class="badge red">API key 未配置或无效</span> <span class="hint">${esc(nxState.user)}（可在「设置 / 环境」页填写后刷新）</span>`;
+      return `<span class="badge green">${esc(nxState.user)}</span> ${nxState.premium
+        ? '<span class="badge green">Premium · 可一键安装</span>'
+        : '<span class="badge red">免费账号</span> <span class="hint">浏览/翻译可用；一键下载需 Premium。安装：到 Nexus 文件页点「Mod Manager 下载」→ 右键复制 nxm:// 链接 → 粘到下方「安装 Mod」区</span>'}`;
+    };
+    const nxFilesModal = async (modId, modName) => {
+      const mask = document.createElement("div");
+      mask.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;display:flex;align-items:center;justify-content:center";
+      const box = document.createElement("div");
+      box.style.cssText = "background:#1b2735;max-width:760px;width:92%;max-height:80vh;overflow:auto;border-radius:8px;padding:16px";
+      box.innerHTML = `<h3 style="margin-top:0">${esc(modName)}</h3><div class="dim">加载文件列表...</div>`;
+      mask.appendChild(box);
+      mask.onclick = e => { if (e.target === mask) mask.remove(); };
+      document.body.appendChild(mask);
+      const closeBtn = () => `<div class="form-actions"><button class="small" id="nxModalClose">关闭</button></div>`;
+      try {
+        const r = await api(`/api/nexus/files?mod_id=${encodeURIComponent(modId)}&game_version=${encodeURIComponent(nxState.gv)}`);
+        const files = r.files || [];
+        box.innerHTML = `
+          <h3 style="margin-top:0">${esc(modName)} · 文件列表</h3>
+          <div class="hint">${nxState.premium
+            ? "点击「一键安装」直接下载并安装到服务器 Mods/ 目录（重启后生效）"
+            : `免费账号不能 API 直链下载。安装方法：打开 <a href="https://www.nexusmods.com/7daystodie/mods/${modId}?tab=files" target="_blank" rel="noopener">Nexus 文件页</a> → 点「Mod Manager 下载」→ 右键复制链接（nxm://…）→ 粘到本页下方「安装 Mod」区的 nxm 输入框`}</div>
+          <div class="hint">安装位置提示：纯 XML modlet 只需装服务端（会自动同步给进服玩家）；纯视觉/音效/HUD 类只需装客户端（服务端不用装）；带 DLL/C# 的 mod 需要服务端和客户端都装。带「标注 x.y」徽标的文件请核对游戏版本后再用。</div>
+          ${files.map(f => {
+            const fid = f.file_id ?? f.id;
+            return `<div class="row" style="border-bottom:1px solid var(--border);padding:6px 0;justify-content:space-between;align-items:center">
+              <div><b>${esc(f.name || f.file_name || "")}</b> ${f.is_primary ? '<span class="badge green">主文件</span>' : ""}
+                <div class="hint">${esc(f.version || f.mod_version || "")} · ${esc(f.category_name || "")} · ${fmtBytes(f.size || (f.size_kb || 0) * 1024)} · ${esc(f.uploaded_time || "")}${nxVerBadge(f.version_hint || "")}</div></div>
+              ${nxState.premium ? `<button class="small primary" data-nxinstall="${fid}">一键安装</button>` : ""}</div>`;
+          }).join("") || '<div class="empty">没有文件</div>'}
+          ${closeBtn()}`;
+        box.querySelectorAll("[data-nxinstall]").forEach(b => b.onclick = async () => {
+          try {
+            const t = await api(`/api/instances/${inst.name}/mods/install-nexus`, { method: "POST", body: { mod_id: +modId, file_id: +b.dataset.nxinstall } });
+            mask.remove();
+            openTaskModal(t.id, load);
+          } catch (e) { toast(e.message, false); }
+        });
+      } catch (e) {
+        box.innerHTML = `<h3 style="margin-top:0">${esc(modName)}</h3><div class="empty">${esc(e.message)}</div>${closeBtn()}`;
+      }
+      box.querySelector("#nxModalClose").onclick = () => mask.remove();
+    };
+    /* ---------- 本地 Mod 目录：筛选/排序/翻页全部在内存做（瞬时，无翻页地狱） ---------- */
+    const nxRender = (list) => {
+      const box = document.getElementById("nxResults");
+      if (!list.length) { box.innerHTML = '<div class="empty">没有符合的 mod（试着放宽筛选或点「同步 Mod 库」）</div>'; return; }
+      box.innerHTML = `<div style="display:flex;flex-direction:column">${list.map(m => {
+        const id = m.mod_id ?? m.id;
+        return `<div class="row" style="gap:10px;align-items:flex-start;border-bottom:1px solid var(--border);padding:8px 0">
+          ${m.picture_url ? `<img src="${esc(m.picture_url)}" style="width:110px;height:66px;object-fit:cover;border-radius:4px;flex:none" loading="lazy" referrerpolicy="no-referrer">` : `<div style="width:110px;height:66px;background:#0d141c;border-radius:4px;flex:none"></div>`}
+          <div style="flex:1;min-width:0">
+            <div><b>${esc(m.name_zh || m.name || "")}</b>${m.name_zh ? ` <span class="hint">${esc(m.name)}</span>` : ""} ${nxSideBadge(m.side)}${nxVerBadge(m.version_hint || "")}</div>
+            <div class="hint">by ${esc(m.author || "-")} · ${esc(m.category_zh || m.category || "")} · ${Number(m.downloads ?? 0).toLocaleString()} 次下载 · ${m.endorsements ?? 0} 赞 · 更新 ${esc(String(m.updated_at || "").slice(0, 10))}</div>
+            <div class="hint">${esc(m.summary_zh || m.summary || "")}</div>
+          </div>
+          <button class="small" data-nxfiles="${id}" data-nxname="${esc(m.name || "")}">文件 / 安装</button>
+        </div>`;
+      }).join("")}</div>`;
+      box.querySelectorAll("[data-nxfiles]").forEach(b => b.onclick = () => nxFilesModal(b.dataset.nxfiles, b.dataset.nxname));
+    };
+    const nxFiltered = () => {
+      const q = nxState.q.toLowerCase();
+      let list = nxState.catalog;
+      if (q) list = list.filter(m =>
+        String(m.name || "").toLowerCase().includes(q) ||
+        String(m.summary || "").toLowerCase().includes(q) ||
+        String(m.author || "").toLowerCase().includes(q) ||
+        (m.tags || []).some(t => String(t).toLowerCase().includes(q)));
+      if (nxState.category) list = list.filter(m => m.category === nxState.category);
+      if (nxState.side) list = list.filter(m => nxState.side === "none" ? !m.side
+        : nxState.side === "server" ? (m.side === "server" || m.side === "both")
+        : (m.side === "client" || m.side === "client?"));
+      if (nxState.verfilter) list = list.filter(m => nxState.verfilter === "match" ? String(m.version_hint || "").startsWith("match")
+        : nxState.verfilter === "maybe" ? String(m.version_hint || "").startsWith("maybe") : !m.version_hint);
+      list = list.slice();
+      const key = nxState.sort;
+      if (key === "relevance" && q) {
+        const score = m => {
+          const n = String(m.name || "").toLowerCase();
+          return (n.startsWith(q) ? 6 : n.includes(q) ? 3 : 0)
+            + (String(m.summary || "").toLowerCase().includes(q) ? 1 : 0)
+            + (String(m.author || "").toLowerCase().includes(q) ? 2 : 0)
+            + ((m.tags || []).some(t => String(t).toLowerCase().includes(q)) ? 1 : 0);
+        };
+        list.sort((a, b) => score(b) - score(a));
+      } else {
+        const field = { downloads: "downloads", endorse: "endorsements", created: "created_at", updated: "updated_at", name: "name" }[key] || "downloads";
+        if (field === "name") list.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+        else list.sort((a, b) => {
+          const x = a[field], y = b[field];
+          if (typeof x === "number" && typeof y === "number") return y - x;
+          return String(y || "").localeCompare(String(x || ""));
+        });
+      }
+      return list;
+    };
+    const nxPageBar = (total) => {
+      const pages = Math.max(1, Math.ceil(total / nxState.pageSize));
+      const page = Math.floor(nxState.offset / nxState.pageSize) + 1;
+      const el = document.getElementById("nxPage");
+      el.innerHTML = `<span class="hint">筛出 <b>${total}</b> 个 / 目录共 ${nxState.catalog.length} 个 · 第 ${page}/${pages} 页
+        ${nxState.syncedAt ? `· 目录同步于 ${esc(String(nxState.syncedAt).slice(0, 16).replace("T", " "))}` : ""}</span>
+        <span><button class="small" id="nxFirst" ${page <= 1 ? "disabled" : ""}>首页</button>
+        <button class="small" id="nxPrev" ${page <= 1 ? "disabled" : ""}>上一页</button>
+        <button class="small" id="nxNext" ${page >= pages ? "disabled" : ""}>下一页</button>
+        <button class="small" id="nxLast" ${page >= pages ? "disabled" : ""}>末页</button></span>`;
+      const go = p => { nxState.offset = Math.max(0, Math.min((pages - 1) * nxState.pageSize, p * nxState.pageSize)); nxGo(); document.getElementById("nexusBox").scrollIntoView?.({ behavior: "smooth" }); };
+      document.getElementById("nxFirst").onclick = () => go(0);
+      document.getElementById("nxPrev").onclick = () => go(page - 2);
+      document.getElementById("nxNext").onclick = () => go(page);
+      document.getElementById("nxLast").onclick = () => go(pages - 1);
+    };
+    const nxGo = async () => {
+      const all = nxFiltered();
+      const list = all.slice(nxState.offset, nxState.offset + nxState.pageSize).map(m => ({ ...m }));
+      if (document.getElementById("nxTranslate").checked && list.length) {
+        const texts = [];
+        list.forEach(m => { if (m.name) texts.push(String(m.name)); if (m.summary) texts.push(String(m.summary)); });
+        try {
+          const tr = await api("/api/translate", { method: "POST", body: { texts } });
+          list.forEach(m => {
+            if (tr.translations[m.name]) m.name_zh = tr.translations[m.name];
+            if (tr.translations[m.summary]) m.summary_zh = tr.translations[m.summary];
+          });
+        } catch (e) { /* 翻译失败不阻断浏览 */ }
+      }
+      nxPageBar(all.length);
+      nxRender(list);
+    };
+    const nxFillCategories = () => {
+      const sel = document.getElementById("nxCategory");
+      const seen = {};
+      nxState.catalog.forEach(m => { if (m.category && !(m.category in seen)) seen[m.category] = m.category_zh || m.category; });
+      const keys = Object.keys(seen).sort((a, b) => seen[a].localeCompare(seen[b]));
+      sel.innerHTML = '<option value="">全部分类</option>' + keys.map(c =>
+        `<option value="${esc(c)}">${esc(seen[c])}</option>`).join("");
+    };
+    const nxLoadCatalog = async () => {
+      const box = document.getElementById("nxResults");
+      box.innerHTML = "加载本地 Mod 目录...";
+      try {
+        const r = await api(`/api/nexus/catalog?game_version=${encodeURIComponent(nxState.gv)}`);
+        nxState.catalog = r.items || [];
+        nxState.syncedAt = r.synced_at || "";
+        if (!nxState.catalog.length) {
+          box.innerHTML = '<div class="empty">本地目录为空，正在开始首次全量同步（9000+ 个 mod，约 2~4 分钟）…</div>';
+          const t = await api("/api/nexus/catalog/sync", { method: "POST" });
+          openTaskModal(t.id, nxLoadCatalog);
+          return;
+        }
+        nxFillCategories();
+        nxGo();
+      } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+    };
+    nb.innerHTML = `
+      <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">
+        <input id="nxQuery" placeholder="本地搜索：名称 / 简介 / 作者 / 标签" style="flex:1;min-width:180px">
+        <button class="primary small" id="nxSearch">搜索</button>
+        <select id="nxSort">
+          <option value="relevance">按相关度</option>
+          <option value="downloads" selected>按下载量</option>
+          <option value="endorse">按点赞</option>
+          <option value="created">最新上传</option>
+          <option value="updated">最近更新</option>
+          <option value="name">按名称</option>
+        </select>
+        <select id="nxCategory"><option value="">全部分类</option></select>
+        <select id="nxSide">
+          <option value="">全部端侧</option>
+          <option value="server">服务端 / 双端</option>
+          <option value="client">客户端</option>
+          <option value="none">未标注</option>
+        </select>
+        <select id="nxVer">
+          <option value="">全部版本</option>
+          <option value="match" id="nxVerMatch">提示兼容本服版本</option>
+          <option value="maybe">标注其他版本</option>
+          <option value="none">未标注</option>
+        </select>
+        <select id="nxPageSize">
+          <option value="50">50/页</option>
+          <option value="100" selected>100/页</option>
+          <option value="200">200/页</option>
+          <option value="500">500/页</option>
+        </select>
+        <label class="hint" style="display:inline-flex;align-items:center;gap:4px;cursor:pointer">
+          <input type="checkbox" id="nxTranslate" style="width:auto" checked> 翻译名称/简介
+        </label>
+        <button class="small" id="nxSync">同步 Mod 库</button>
+      </div>
+      <div class="hint" style="margin-top:8px" id="nxAccount">Nexus 账号检查中...</div>
+      <div class="row" id="nxPage" style="justify-content:space-between;align-items:center;margin-top:6px"></div>
+      <div id="nxResults" class="mt"></div>`;
+    const nxReset = () => { nxState.offset = 0; nxGo(); };
+    document.getElementById("nxSearch").onclick = () => {
+      nxState.q = document.getElementById("nxQuery").value.trim();
+      nxReset();
+    };
+    document.getElementById("nxQuery").onkeydown = e => {
+      if (e.key === "Enter") { nxState.q = e.target.value.trim(); nxReset(); }
+    };
+    document.getElementById("nxSort").onchange = e => { nxState.sort = e.target.value; nxReset(); };
+    document.getElementById("nxCategory").onchange = e => { nxState.category = e.target.value; nxReset(); };
+    document.getElementById("nxSide").onchange = e => { nxState.side = e.target.value; nxReset(); };
+    document.getElementById("nxVer").onchange = e => { nxState.verfilter = e.target.value; nxReset(); };
+    document.getElementById("nxPageSize").onchange = e => { nxState.pageSize = +e.target.value; nxReset(); };
+    const nxTr = document.getElementById("nxTranslate");
+    nxTr.checked = localStorage.getItem("nxTranslate") !== "0";
+    nxTr.onchange = () => { localStorage.setItem("nxTranslate", nxTr.checked ? "1" : "0"); nxGo(); };
+    document.getElementById("nxSync").onclick = async () => {
+      try {
+        const t = await api("/api/nexus/catalog/sync", { method: "POST" });
+        openTaskModal(t.id, nxLoadCatalog);
+      } catch (e) { toast(e.message, false); }
+    };
+    await nxLoadAccount();
+    document.getElementById("nxAccount").innerHTML = nxAccountHtml();
+    await nxLoadGameVersion();
+    if (nxState.gv) {
+      const vm = document.getElementById("nxVerMatch");
+      if (vm) vm.textContent = `提示兼容本服版本（V${nxState.gv}）`;
+    }
+    await nxLoadCatalog();
+  };
+  await load();
 }
 
 /* 备份 */
@@ -1427,6 +2033,32 @@ async function renderSettings() {
       <div id="ue4ssGlobal" class="dim">加载中...</div>
     </div>
     <div class="card">
+      <h3>NexusMods API key（七日杀 Mod 在线搜索/安装）</h3>
+      <div class="form-row">
+        <div><label>API key（${sys.nexus_configured ? "已配置，重新填写可替换" : "未配置"}）</label>
+          <input type="password" id="nexusKey" placeholder="nexusmods.com → 账号 → API 访问" value=""></div>
+      </div>
+      <div class="form-actions">
+        <button class="primary small" id="nexusKeySave">保存</button>
+        <button class="small" id="nexusKeyTest">验证 key</button>
+      </div>
+      <div class="hint">免费账号即可搜索 mod、粘贴 nxm 临时链接下载；Premium 账号支持文件列表里一键直链下载。key 只存本机 <span class="mono">data/config.json</span>，仅在实例「Mod 管理」页使用。</div>
+    </div>
+    <div class="card">
+      <h3>Mod 中文翻译（${sys.translate_configured ? "已配置 LLM 接口" : "默认链路：内置词典 + 免费翻译接口"}）</h3>
+      <div class="form-row">
+        <div><label>OpenAI 兼容接口地址（可选；留空=使用内置词典 + 免费接口）</label>
+          <input id="trBase" class="mono" value="${esc(sys.translate_base_url || "")}" placeholder="https://api.deepseek.com"></div>
+        <div><label>模型名</label><input id="trModel" class="mono" value="${esc(sys.translate_model || "")}" placeholder="deepseek-chat"></div>
+      </div>
+      <div class="form-row">
+        <div><label>API key（${sys.translate_configured ? "已配置，留空则不修改" : "可选"}）</label><input type="password" id="trKey" placeholder="留空不修改；清空接口地址即清除全部配置"></div>
+      </div>
+      <div class="form-actions"><button class="primary small" id="trSave">保存</button></div>
+      <div class="hint">用于「Mod 管理」页的名称/描述中文翻译。不配 LLM 也能用：内置词典覆盖游戏自带组件，其余走免费翻译接口（质量一般）；
+        配置 DeepSeek 等 OpenAI 兼容接口后译文质量更好。译文按原文缓存到 <span class="mono">data/modlang.json</span>，同文本只翻一次。</div>
+    </div>
+    <div class="card">
       <h3>修改管理员密码</h3>
       <div class="form-row">
         <div><label>原密码</label><input type="password" id="oldPw"></div>
@@ -1437,7 +2069,7 @@ async function renderSettings() {
     <div class="card">
       <h3>扩展新游戏</h3>
       <div class="hint">将模板 JSON 放入 <span class="mono">${esc(sys.base_dir)}/templates/</span> 并重启面板即可。字段参照内置模板：
-      steam_app_id、executable、default_args、ports、configs（option-settings/kv/raw 三种格式）、rcon、backup_paths。</div>
+      steam_app_id、executable、default_args、ports、configs（option-settings/kv/xmlkv/raw 四种格式）、rcon（source/telnet）、mod_manager、backup_paths。</div>
     </div>`);
   const depBtn = document.getElementById("depBtn");
   if (depBtn) depBtn.onclick = async () => {
@@ -1461,6 +2093,31 @@ async function renderSettings() {
       const targets = document.getElementById("syncTarget").value.split(/[,，\s]+/).filter(Boolean);
       const r = await api("/api/settings/sync-target", { method: "POST", body: { sync_targets: targets } });
       toast(r.sync_targets.length ? "已保存，备份后将同步到 " + r.sync_targets.join(", ") : "已关闭备份异地同步");
+      renderSettings();
+    } catch (e) { toast(e.message, false); }
+  };
+  document.getElementById("nexusKeySave").onclick = async () => {
+    try {
+      const r = await api("/api/settings/nexus", { method: "POST", body: { api_key: document.getElementById("nexusKey").value } });
+      toast(r.configured ? "已保存" : "已清空");
+      renderSettings();
+    } catch (e) { toast(e.message, false); }
+  };
+  document.getElementById("nexusKeyTest").onclick = async () => {
+    try {
+      const r = await api("/api/nexus/validate");
+      const u = r.user || {};
+      toast(`key 有效：${u.name || u.user_id || "?"}${u.is_premium ? "（Premium，可一键下载）" : "（免费账号，下载请用 nxm 链接）"}`);
+    } catch (e) { toast(e.message, false); }
+  };
+  document.getElementById("trSave").onclick = async () => {
+    try {
+      const r = await api("/api/settings/translate", { method: "POST", body: {
+        base_url: document.getElementById("trBase").value.trim(),
+        api_key: document.getElementById("trKey").value,
+        model: document.getElementById("trModel").value.trim(),
+      }});
+      toast(r.configured ? "已保存翻译接口配置" : "已恢复默认翻译链路");
       renderSettings();
     } catch (e) { toast(e.message, false); }
   };
