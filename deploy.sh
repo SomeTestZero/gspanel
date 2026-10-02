@@ -84,8 +84,9 @@ Restart=on-failure
 RestartSec=3
 LimitNOFILE=65536
 # 需要写/改 games 属主的游戏文件（写完 chown 回 games）；切 games 走 sudo，不用 SETUID。
+# CAP_FOWNER：对 games 属主文件 chmod（copyFileAs 安装 mod/start.sh 时用）。
 # 注意：不要设 CapabilityBoundingSet——它会连带限制 setuid root 的 sudo（缺 CAP_SETUID 切不到 games）。
-AmbientCapabilities=CAP_CHOWN CAP_DAC_OVERRIDE
+AmbientCapabilities=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER
 
 [Install]
 WantedBy=multi-user.target

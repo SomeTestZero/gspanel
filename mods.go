@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -26,6 +27,27 @@ const (
 	palworldAssetRoot = "assets/palworld-ue4ss"
 	ue4ssMaxBinary    = 300 << 20 // 上传/导入/下载的 libUE4SS.so 上限
 )
+
+// modVersion 面板内置 mod 脚本的版本号，必须与 assets/palworld-ue4ss/mod/scripts/main.lua
+// 里的 MOD_VERSION 一致；不一致会导致「扩展命令 mod 有更新」提示。
+const modVersion = "2026-09-13.3"
+
+func embeddedModVersion() string { return modVersion }
+
+var modVersionRe = regexp.MustCompile(`MOD_VERSION\s*=\s*"([^"]+)"`)
+
+// modFileVersion 解析实例里 main.lua 的版本号（读不到返回空串）
+func modFileVersion(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	m := modVersionRe.FindSubmatch(data)
+	if m == nil {
+		return ""
+	}
+	return string(m[1])
+}
 
 func ue4ssAssetDir() string  { return filepath.Join(BaseDir, "data", "ue4ss") }
 func ue4ssAssetPath() string { return filepath.Join(ue4ssAssetDir(), "libUE4SS.so") }
@@ -96,6 +118,9 @@ type UE4SSStatus struct {
 	Queue        bool            `json:"queue"`         // gspanel-mod 命令队列目录
 	StartPatched bool            `json:"start_patched"` // start.sh 已注入 LD_PRELOAD
 	Binary       UE4SSBinaryInfo `json:"binary"`        // 面板侧二进制
+	ModVersion   string          `json:"mod_version"`   // 实例上 mod 的版本
+	ModLatest    string          `json:"mod_latest"`    // 面板内置 mod 的版本
+	ModStale     bool            `json:"mod_stale"`     // 实例 mod 落后于面板内置（需重装+重启）
 }
 
 func ue4ssStatus(inst *Instance) UE4SSStatus {
@@ -104,12 +129,16 @@ func ue4ssStatus(inst *Instance) UE4SSStatus {
 		Supported: inst.Template == "palworld",
 		Enabled:   inst.UE4SS,
 		Binary:    ue4ssBinaryInfo(),
+		ModLatest: modVersion,
 	}
 	if _, err := os.Stat(filepath.Join(bin, "libUE4SS.so")); err == nil {
 		st.Installed = true
 	}
-	if _, err := os.Stat(filepath.Join(bin, "Mods", "gspanel", "scripts", "main.lua")); err == nil {
+	modPath := filepath.Join(bin, "Mods", "gspanel", "scripts", "main.lua")
+	if _, err := os.Stat(modPath); err == nil {
 		st.Mod = true
+		st.ModVersion = modFileVersion(modPath)
+		st.ModStale = st.ModVersion != modVersion
 	}
 	if fi, err := os.Stat(filepath.Join(bin, "gspanel-mod")); err == nil && fi.IsDir() {
 		st.Queue = true

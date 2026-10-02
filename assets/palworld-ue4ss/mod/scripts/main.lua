@@ -1,16 +1,25 @@
 -- GSPanel 扩展命令 mod（Palworld 原生 Linux，基于 ue4ss-linux / LD_PRELOAD）
--- 功能：给物品 / 给经验 / 给帕鲁（可扩展）+ 在线玩家索引
+-- 版本：2026-09-13.3
+--   面板会比对版本：旧版 mod 不支持 players/items 队列命令。
+-- 功能：给物品 / 给经验 / 在线玩家索引 / 物品表导出（ID + 分类/堆叠上限）
+--
+-- 物品中文名不在这里取：本 build 的 UE4SS FText 转换有 bug（FText::ToString →
+-- KismetTextLibrary native macro 找不到 UFunction，throw 后 abort 游戏进程），
+-- 中文名由面板侧从游戏 pak 的 L10N/DT_ItemNameText 离线提取并内置（见 palworlditems.go）。
+-- 这里的 items 命令只导出 DT_ItemDataTable 的行名（物品 ID）与少量非文本字段。
+--
 -- 两种驱动方式：
---   1) 控制台命令（RCON 或游戏内控制台）：give/giveexp/givepal/gspwho
---   2) 文件队列（gspanel-mod/queue/*.txt），面板兜底用，无需依赖 RCON 分发实现
+--   1) 控制台命令（RCON 或游戏内控制台）：give/giveexp/gspwho
+--   2) 文件队列（gspanel-mod/cmd.txt），面板用：give/giveexp/who/whojson/hello/items
 local LOG = "[gspanel]"
+local MOD_VERSION = "2026-09-13.3"
 local unpack = table.unpack or unpack -- Lua 5.4 只提供 table.unpack；直接调全区 unpack 会抛错并导致 UE4SS abort
 local function log(fmt, ...)
   local ok, s = pcall(string.format, fmt, ...)
   print(LOG .. " " .. (ok and s or tostring(fmt)) .. "\n")
 end
 
-log("mod loading...")
+log("mod loading... (version " .. MOD_VERSION .. ")")
 
 -- ============ 玩家索引 ============
 local players = {}      -- key(小写) -> { obj=, name=, uid=, steam= }
@@ -153,6 +162,122 @@ local function listPlayers()
   return table.concat(out, "\n")
 end
 
+-- ============ JSON 辅助（无第三方库，手写转义） ============
+local function jsonStr(s)
+  if s == nil then return "null" end
+  s = tostring(s)
+  s = s:gsub("\\", "\\\\"):gsub("\"", "\\\""):gsub("\r", "\\r"):gsub("\n", "\\n"):gsub("\t", "\\t")
+  s = s:gsub("%c", " ")
+  return "\"" .. s .. "\""
+end
+
+local function jsonNum(n)
+  if type(n) ~= "number" then return "null" end
+  return string.format("%d", n)
+end
+
+-- 在线玩家结构化输出（面板下拉框用）
+local function playersJSON()
+  pcall(refreshPlayers)
+  local seen, out = {}, {}
+  for _, info in ipairs(playerList) do
+    local k = tostring(info.name) .. "|" .. tostring(info.uid)
+    if not seen[k] and info.name and info.name ~= "" then
+      seen[k] = true
+      out[#out+1] = string.format("{\"name\":%s,\"uid\":%s,\"steam\":%s}",
+        jsonStr(info.name), jsonStr(info.uid or ""), jsonStr(info.steam or ""))
+    end
+  end
+  return true, "[" .. table.concat(out, ",") .. "]"
+end
+
+-- ============ 物品表导出（面板「给物品」用） ============
+local ITEM_DT_PATHS = {
+  "/Game/Pal/DataTable/Item/DT_ItemDataTable.DT_ItemDataTable",
+  "/Game/Pal/DataTable/Item/DT_ItemDataTable",
+}
+local ITEMS_FILE = "gspanel-mod/items.json"
+
+local function findObject(path)
+  local ok, obj = pcall(StaticFindObject, path)
+  if ok and obj then
+    local okv, valid = pcall(function() return obj:IsValid() end)
+    if okv and valid ~= false then return obj end
+  end
+  return nil
+end
+
+local function findItemTable()
+  for _, p in ipairs(ITEM_DT_PATHS) do
+    local dt = findObject(p)
+    if dt then return dt, p end
+  end
+  return nil, nil
+end
+
+-- 枚举值 -> 名字（EPalItemTypeA:Weapon -> Weapon）
+local function nameToStr(v)
+  if v == nil then return nil end
+  local t = type(v)
+  if t == "string" then return v end
+  if t == "number" or t == "boolean" then return tostring(v) end
+  local ok, s = pcall(function() return v:ToString() end)
+  if ok and type(s) == "string" then return s end
+  return nil
+end
+
+local function enumName(enumObj, value)
+  if not enumObj or value == nil or type(value) ~= "number" then return nil end
+  local ok, n = pcall(function() return enumObj:GetNameByValue(value) end)
+  if not ok or n == nil then return nil end
+  local s = nameToStr(n)
+  if not s then return nil end
+  local short = s:match("::(.+)$")
+  return short or s
+end
+
+-- 导出 DT_ItemDataTable 的行名（物品 ID）。
+-- 注意：1.0.4 的行结构体 PalStaticItemDataStruct 是精简表，没有 Name/TypeA/TypeB/Rarity/
+-- MaxStackCount 等字段（实测访问 TypeA 直接 abort）；物品详情在 DataAsset 里。
+-- 本 build 又禁止任何 UE4SS 抛错（-> abort），所以这里只做最安全的 GetRowNames。
+local function dumpItems()
+  local dt, how = findItemTable()
+  if not dt then
+    return false, "找不到物品数据表 DT_ItemDataTable（游戏是否已加载完？）"
+  end
+  local okN, ids = pcall(function() return dt:GetRowNames() end)
+  if not okN or type(ids) ~= "table" then
+    return false, "GetRowNames 失败: " .. tostring(ids)
+  end
+  local total = #ids
+  if total == 0 then return false, "物品数据表为空（游戏可能还没加载完物品数据）" end
+  log("items: got %d item rows via %s", total, tostring(how))
+
+  local parts = {}
+  for i = 1, total do
+    local id = ids[i]
+    if type(id) ~= "string" then id = tostring(id) end
+    parts[#parts+1] = jsonStr(id)
+    if i % 500 == 0 then log("items: row %d/%d", i, total) end
+  end
+  log("items: scan done rows=%d", #parts)
+
+  local json = "{\"ok\":true,\"mod_version\":" .. jsonStr(MOD_VERSION) ..
+    ",\"path\":" .. jsonStr(how or "") ..
+    ",\"count\":" .. tostring(#parts) ..
+    ",\"ids\":[" .. table.concat(parts, ",") .. "]}"
+  local f = io.open(ITEMS_FILE, "w")
+  if not f then
+    return false, "无法写入 " .. ITEMS_FILE
+  end
+  f:write(json)
+  f:close()
+
+  local msg = string.format("已导出 %d 个物品 ID（表 %s，文件 %s）", #parts, tostring(how), ITEMS_FILE)
+  log("%s", msg)
+  return true, msg
+end
+
 -- ============ 控制台命令（RCON 兼容路径） ============
 local function reply(Ar, text)
   if Ar then
@@ -215,6 +340,14 @@ local function splitLines(s)
   return t
 end
 
+local function writeResult(ok, msg)
+  local of = io.open(RES_FILE, "w")
+  if of then
+    of:write(ok and "OK" or "FAIL", "\n", tostring(msg), "\n")
+    of:close()
+  end
+end
+
 pcall(function()
   LoopAsync(500, function()
     local f = io.open(CMD_FILE, "r")
@@ -232,14 +365,16 @@ pcall(function()
         else ok, msg = false, "玩家不在线: " .. tostring(lines[2]) end
       elseif verb == "who" then
         ok, msg = true, listPlayers()
+      elseif verb == "whojson" then
+        ok, msg = playersJSON()
+      elseif verb == "hello" then
+        ok, msg = true, string.format("{\"version\":%s,\"verbs\":[\"give\",\"giveexp\",\"who\",\"whojson\",\"hello\",\"items\"]}", jsonStr(MOD_VERSION))
+      elseif verb == "items" then
+        ok, msg = dumpItems()
       else
         ok, msg = false, "未知命令: " .. tostring(verb)
       end
-      local of = io.open(RES_FILE, "w")
-      if of then
-        of:write(ok and "OK" or "FAIL", "\n", tostring(msg), "\n")
-        of:close()
-      end
+      writeResult(ok, msg)
       log("cmd %s -> %s: %s", tostring(verb), ok and "OK" or "FAIL", tostring(msg))
     end
     return false
@@ -250,11 +385,11 @@ end)
 -- 简单自检文件，确认 Lua 有文件写权限
 local f = io.open("gspanel-mod/mod-alive.txt", "w")
 if f then
-  f:write(os.date("%Y-%m-%d %H:%M:%S"), "\n")
+  f:write(os.date("%Y-%m-%d %H:%M:%S"), " " .. MOD_VERSION, "\n")
   f:close()
   log("mod-alive.txt written")
 else
   log("WARN: cannot write mod-alive.txt")
 end
 
-log("mod loaded")
+log("mod loaded (version " .. MOD_VERSION .. ")")

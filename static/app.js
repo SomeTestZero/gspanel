@@ -11,6 +11,7 @@ let S = {
   es: null,          // 当前 EventSource
   pollers: [],       // 定时器
   taskStream: null,
+  itemDBCache: {},   // 实例名 -> 物品库（「给物品」对话框用）
   renderSeq: 0,      // 渲染代际：过期渲染一律丢弃
   dashSig: "",       // 仪表盘实例状态签名（变化才整体重绘）
 };
@@ -459,14 +460,7 @@ function initConsole(inst, running) {
       row2.appendChild(el);
     };
     addBtn("在线玩家", () => modCmd(inst.name, "who", [], "在线玩家"));
-    addBtn("给物品…", () => {
-      const v = prompt("格式: 玩家名/PlayerUID/SteamID 物品ID 数量\n例如: some_test0 Wood 100");
-      if (!v) return;
-      const p = v.trim().split(/\s+/);
-      if (p.length < 3) { alert("参数不足（需要 玩家 物品ID 数量）"); return; }
-      if (!confirm(`确认给「${p[0]}」物品 ${p[1]} x ${p[2]}？`)) return;
-      modCmd(inst.name, "give", [p[0], p[1], p[2]], "给物品");
-    });
+    addBtn("给物品…", () => openGiveItemDialog(inst));
     addBtn("给经验…", () => {
       const v = prompt("格式: 玩家名/PlayerUID/SteamID 经验值\n例如: some_test0 5000");
       if (!v) return;
@@ -498,13 +492,354 @@ async function sendCommand(name, cmd) {
   } catch (e) { consoleAppend("错误: " + e.message, "cmd-err"); }
 }
 
-/* 走 UE4SS mod 文件队列的扩展命令（给物品/给经验/在线玩家） */
+/* 走 UE4SS mod 文件队列的扩展命令（给物品/给经验/在线玩家）；返回 {ok,message} 供调用方判断 */
 async function modCmd(name, verb, args, label) {
   consoleAppend(`> [${label || verb}] ${args.join(" ")}`, "cmd-echo");
   try {
     const r = await api(`/api/instances/${name}/mod-command`, { method: "POST", body: { verb, args } });
     consoleAppend(r.message || "(无响应)", r.ok ? "cmd-resp" : "cmd-err");
-  } catch (e) { consoleAppend("错误: " + e.message, "cmd-err"); }
+    return r;
+  } catch (e) {
+    consoleAppend("错误: " + e.message, "cmd-err");
+    throw e;
+  }
+}
+
+/* ---------- 「给物品」对话框：在线玩家下拉 + 全量物品搜索（中文名/ID） ---------- */
+async function loadItemDB(inst) {
+  if (S.itemDBCache[inst.name]) return S.itemDBCache[inst.name];
+  const db = await api(`/api/instances/${inst.name}/items`);
+  S.itemDBCache[inst.name] = db;
+  return db;
+}
+
+function openGiveItemDialog(inst) {
+  closeModal();
+  const mask = document.createElement("div");
+  mask.className = "modal-mask";
+  mask.id = "modalMask";
+  mask.innerHTML = `
+  <div class="modal give-modal">
+    <h3>给物品 <span class="hint" id="giveDbInfo">加载物品库…</span>
+      <span style="flex:1"></span>
+      <button class="small" id="giveDbRefresh" title="让游戏重新导出物品库（需要游戏运行且已装新版扩展命令）">从游戏刷新物品库</button>
+    </h3>
+    <div id="giveWarn"></div>
+    <div class="give-line">
+      <div style="flex:1"><label>在线玩家</label><select id="givePlayer"><option value="">加载中…</option></select></div>
+      <button class="small" id="givePlayerRefresh">刷新</button>
+    </div>
+    <div id="giveManualBox" style="display:none">
+      <label>手动输入玩家名 / PlayerUID / SteamID</label>
+      <input id="givePlayerText" placeholder="玩家名或 SteamID">
+    </div>
+    <label>搜索物品（游戏内中文名 / 物品ID）</label>
+    <input id="giveSearch" placeholder="例如：木材、帕鲁球、Wood…" autocomplete="off">
+    <div class="row mt" id="giveCats"></div>
+    <div class="item-list" id="giveList"><div class="item-empty">加载中…</div></div>
+    <div class="give-line mt">
+      <div><label>数量</label><input id="giveQty" type="number" min="1" step="1" value="100" style="width:110px"></div>
+      <div class="row" id="giveQtyPresets" style="margin-top:16px"></div>
+      <div style="flex:1"></div>
+      <div class="hint" id="giveSel" style="margin-top:16px"></div>
+    </div>
+    <div class="row mt" id="giveRecent"></div>
+    <div class="form-actions">
+      <span id="giveResult" class="hint" style="margin-right:auto;align-self:center"></span>
+      <button id="giveClose">关闭</button>
+      <button class="primary" id="giveSubmit" disabled>给物品</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mask);
+
+  const $ = id => document.getElementById(id);
+  const qtyInput = $("giveQty");
+  const playerKey = `gspGivePlayer:${inst.name}`;
+  const st = { db: null, items: [], index: {}, catLabels: {}, filter: "", cat: "", selected: null, visible: [], selIdx: -1, dbStale: "", playerErr: "" };
+  const savedQty = parseInt(localStorage.getItem("gspGiveQty") || "", 10);
+  if (savedQty > 0) qtyInput.value = savedQty;
+
+  const close = () => closeModal();
+  $("giveClose").onclick = close;
+  mask.onclick = e => { if (e.target === mask) close(); };
+  $("giveDbInfo").textContent = "加载物品库…";
+
+  /* ---- 顶部提示（mod 过旧 / 玩家列表失败 / 物品库过期） ---- */
+  function renderWarn() {
+    const parts = [];
+    if (inst.ue4ss && inst.ue4ss.mod_stale) {
+      parts.push(`扩展命令 mod 有更新（实例 ${esc(inst.ue4ss.mod_version || "旧版")} → 面板 ${esc(inst.ue4ss.mod_latest || "")}）：在线玩家列表 / 物品库刷新需要新版。` +
+        `<button class="small" id="giveFixMod" style="margin-left:8px">安装并重启实例</button>`);
+    }
+    if (st.playerErr) parts.push(st.playerErr);
+    if (st.dbStale) parts.push(st.dbStale);
+    $("giveWarn").innerHTML = parts.length ? `<div class="warn-box">${parts.join("<br>")}</div>` : "";
+    const b = $("giveFixMod");
+    if (b) b.onclick = async () => {
+      if (!confirm("更新扩展命令 mod 并重启实例？\n重启会让在线玩家掉线；更新后在线玩家列表/物品库刷新才可用。")) return;
+      try {
+        await api(`/api/instances/${inst.name}/ue4ss`, { method: "POST", body: { action: "install" } });
+        const t = await api(`/api/instances/${inst.name}/restart`, { method: "POST" });
+        toast("已开始重启，任务执行中…");
+        openTaskModal(t.id, () => reloadPlayers());
+      } catch (e) { toast(e.message, false); }
+    };
+  }
+
+  /* ---- 在线玩家 ---- */
+  function currentPlayer() {
+    const sel = $("givePlayer");
+    if (sel && sel.value) return sel.value;
+    return ($("givePlayerText").value || "").trim();
+  }
+  async function reloadPlayers() {
+    const sel = $("givePlayer");
+    st.playerErr = "";
+    sel.innerHTML = `<option value="">加载中…</option>`;
+    try {
+      const r = await api(`/api/instances/${inst.name}/players`);
+      const players = r.players || [];
+      if (!players.length) {
+        sel.innerHTML = `<option value="">（当前没有在线玩家）</option>`;
+        $("giveManualBox").style.display = "";
+      } else {
+        sel.innerHTML = players.map(p => {
+          const v = p.uid || p.steam || p.name;
+          const extra = p.steam ? " · " + p.steam : (p.uid ? " · " + p.uid.slice(0, 8) : "");
+          return `<option value="${esc(v)}">${esc(p.name)}${esc(extra)}</option>`;
+        }).join("");
+        $("giveManualBox").style.display = "none";
+        const last = localStorage.getItem(playerKey);
+        if (last && players.some(p => (p.uid || p.steam || p.name) === last)) sel.value = last;
+        else localStorage.setItem(playerKey, sel.value);
+      }
+    } catch (e) {
+      sel.innerHTML = `<option value="">读取失败</option>`;
+      $("giveManualBox").style.display = "";
+      if (!($("givePlayerText").value || "").trim()) $("givePlayerText").value = localStorage.getItem(playerKey) || "";
+      st.playerErr = `在线玩家列表读取失败：${esc(e.message)}；可手动输入玩家名/UID/SteamID 继续。`;
+    }
+    renderWarn();
+    updateSubmit();
+  }
+
+  /* ---- 物品库 ---- */
+  function applyDB() {
+    st.items = st.db.items || [];
+    st.index = {};
+    st.catLabels = {};
+    st.items.forEach(it => { st.index[it.id] = it; });
+    ((st.db.categories) || []).forEach(c => { st.catLabels[c.key] = c.label; });
+    $("giveDbInfo").textContent = `共 ${st.db.total ?? st.items.length} 项 · ${st.db.builtin ? "内置基线" : "游戏导出"}`;
+    st.dbStale = st.db.stale
+      ? `游戏可能已更新（本地 build ${esc(st.db.local_build_id || "?")} ≠ 物品库 build ${esc(st.db.game_build_id || "?")}），建议点右上角「从游戏刷新物品库」。`
+      : "";
+    renderWarn();
+    renderCats();
+    renderList();
+    renderRecent();
+    renderQtyPresets();
+    updateSubmit();
+  }
+  async function loadDB(force) {
+    if (force) delete S.itemDBCache[inst.name];
+    try {
+      st.db = await loadItemDB(inst);
+      applyDB();
+    } catch (e) {
+      $("giveDbInfo").textContent = "";
+      $("giveList").innerHTML = `<div class="item-empty">物品库加载失败: ${esc(e.message)}</div>`;
+    }
+  }
+  function catLabel(it) {
+    const k = it.type || "";
+    if (!k) return "";
+    return st.catLabels[k] || k;
+  }
+  function renderCats() {
+    const cats = (st.db && st.db.categories) || [];
+    if (!cats.length) { $("giveCats").innerHTML = ""; $("giveCats").style.display = "none"; return; }
+    $("giveCats").style.display = "";
+    const chips = [`<span class="cat-chip ${st.cat === "" ? "on" : ""}" data-cat="">全部</span>`];
+    cats.forEach(c => chips.push(`<span class="cat-chip ${st.cat === c.key ? "on" : ""}" data-cat="${esc(c.key)}">${esc(c.label)} ${c.count}</span>`));
+    $("giveCats").innerHTML = chips.join("");
+    $("giveCats").querySelectorAll(".cat-chip").forEach(el => el.onclick = () => {
+      st.cat = el.dataset.cat;
+      renderCats();
+      renderList();
+    });
+  }
+  function filteredItems() {
+    const q = st.filter.trim().toLowerCase();
+    let items = st.items;
+    if (st.cat) items = items.filter(i => (i.type || "None") === st.cat);
+    if (q) {
+      items = items.filter(i => (i.name || "").toLowerCase().includes(q) || i.id.toLowerCase().includes(q));
+      const score = i => ((i.name || "").toLowerCase().startsWith(q) ? 0 : 1) * 2 +
+        (i.id.toLowerCase().startsWith(q) ? 0 : 1);
+      items = items.slice().sort((a, b) => score(a) - score(b) || (a.name || a.id).localeCompare(b.name || b.id, "zh"));
+    }
+    return items;
+  }
+  function renderList() {
+    const list = $("giveList");
+    const items = filteredItems();
+    st.visible = items.slice(0, 300);
+    st.selIdx = st.selected ? st.visible.findIndex(x => x.id === st.selected.id) : -1;
+    if (!items.length) {
+      list.innerHTML = `<div class="item-empty">没有匹配的物品${st.db && st.db.builtin ? "；试试点右上角「从游戏刷新物品库」" : ""}</div>`;
+      updateSubmit();
+      return;
+    }
+    list.innerHTML = st.visible.map((it, i) => {
+      const meta = [catLabel(it), it.max_stack ? "上限 " + it.max_stack : ""].filter(Boolean).join(" · ");
+      const idHtml = it.id && it.id !== it.name ? `<span class="item-en mono">${esc(it.id)}</span>` : "";
+      return `
+      <div class="item-row ${st.selected && st.selected.id === it.id ? "sel" : ""}" data-i="${i}">
+        <div class="item-name">${esc(it.name || it.id)}${idHtml}</div>
+        ${meta ? `<div class="item-meta">${esc(meta)}</div>` : ""}
+      </div>`;
+    }).join("") +
+      (items.length > st.visible.length ? `<div class="item-empty">还有 ${items.length - st.visible.length} 条，继续输入以缩小范围…</div>` : "");
+    list.querySelectorAll(".item-row").forEach(el => {
+      const it = st.visible[+el.dataset.i];
+      el.onclick = () => selectItem(it);
+      el.ondblclick = () => { selectItem(it); submit(); };
+    });
+    updateSubmit();
+  }
+  function selectItem(it) {
+    st.selected = it;
+    $("giveSel").textContent = `已选：${it.name || it.id}（${it.id}）`;
+    renderList();
+    renderQtyPresets();
+  }
+  function moveSel(delta) {
+    if (!st.visible.length) return;
+    let idx = st.selIdx;
+    if (idx < 0) idx = delta > 0 ? 0 : st.visible.length - 1;
+    else idx = Math.max(0, Math.min(st.visible.length - 1, idx + delta));
+    st.selIdx = idx;
+    selectItem(st.visible[idx]);
+    const el = $("giveList").querySelector(`.item-row[data-i="${idx}"]`);
+    if (el) el.scrollIntoView({ block: "nearest" });
+  }
+  function renderQtyPresets() {
+    const vals = [1, 10, 100, 1000];
+    let html = vals.map(v => `<button class="small" data-q="${v}">${v}</button>`).join("");
+    const max = st.selected && st.selected.max_stack;
+    if (max && max > 0) html += `<button class="small" data-q="${max}">满栈 ${max}</button>`;
+    $("giveQtyPresets").innerHTML = html;
+    $("giveQtyPresets").querySelectorAll("button").forEach(b => b.onclick = () => {
+      qtyInput.value = b.dataset.q;
+      updateSubmit();
+    });
+  }
+  function recentIds() {
+    try { return JSON.parse(localStorage.getItem(`gspRecent:${inst.name}`) || "[]"); } catch (e) { return []; }
+  }
+  function renderRecent() {
+    const ids = recentIds().map(id => st.index[id]).filter(Boolean);
+    if (!ids.length) { $("giveRecent").innerHTML = ""; return; }
+    $("giveRecent").innerHTML = `<span class="hint">最近用过:</span>` + ids.map(it =>
+      `<button class="small" data-id="${esc(it.id)}">${esc(it.name || it.id)}</button>`).join("");
+    $("giveRecent").querySelectorAll("button").forEach(b => b.onclick = () => {
+      selectItem(st.index[b.dataset.id]);
+      $("giveSearch").focus();
+    });
+  }
+  function pushRecent(id) {
+    let ids = recentIds().filter(x => x !== id);
+    ids.unshift(id);
+    localStorage.setItem(`gspRecent:${inst.name}`, JSON.stringify(ids.slice(0, 8)));
+    renderRecent();
+  }
+
+  /* ---- 提交 ---- */
+  function updateSubmit() {
+    const ok = currentPlayer() && st.selected && parseInt(qtyInput.value, 10) > 0;
+    $("giveSubmit").disabled = !ok;
+  }
+  async function submit() {
+    const player = currentPlayer();
+    const it = st.selected;
+    const qty = parseInt(qtyInput.value, 10);
+    const out = $("giveResult");
+    if (!player) { out.className = "hint err-text"; out.textContent = "请选择或输入玩家"; return; }
+    if (!it) { out.className = "hint err-text"; out.textContent = "请搜索并选择物品"; return; }
+    if (!qty || qty < 1) { out.className = "hint err-text"; out.textContent = "数量需大于 0"; return; }
+    const btn = $("giveSubmit");
+    btn.disabled = true;
+    btn.textContent = "给予中…";
+    out.className = "hint";
+    out.textContent = "";
+    try {
+      const r = await modCmd(inst.name, "give", [player, it.id, String(qty)], `给物品 ${it.name || it.id}`);
+      if (r.ok) {
+        out.className = "hint ok-text";
+        out.textContent = `✓ 已给「${it.name || it.id}」× ${qty}`;
+        pushRecent(it.id);
+        localStorage.setItem("gspGiveQty", String(qty));
+        localStorage.setItem(playerKey, player);
+        toast(`已给予 ${it.name || it.id} × ${qty}`);
+      } else {
+        out.className = "hint err-text";
+        out.textContent = "失败：" + (r.message || "未知错误");
+      }
+    } catch (e) {
+      out.className = "hint err-text";
+      out.textContent = "失败：" + e.message;
+    } finally {
+      btn.textContent = "给物品";
+      updateSubmit();
+    }
+  }
+
+  /* ---- 事件绑定 ---- */
+  $("giveSubmit").onclick = submit;
+  $("givePlayerRefresh").onclick = () => reloadPlayers();
+  $("givePlayer").onchange = () => { localStorage.setItem(playerKey, currentPlayer()); updateSubmit(); };
+  $("givePlayerText").oninput = updateSubmit;
+  qtyInput.oninput = updateSubmit;
+  let debounce = null;
+  $("giveSearch").oninput = () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(() => { st.filter = $("giveSearch").value; renderList(); }, 120);
+  };
+  $("giveSearch").onkeydown = e => {
+    if (e.key === "Escape") { close(); return; }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (st.selected) submit();
+      else if (st.visible.length) selectItem(st.visible[0]);
+      return;
+    }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      moveSel(e.key === "ArrowDown" ? 1 : -1);
+      $("giveSearch").focus();
+    }
+  };
+  $("giveDbRefresh").onclick = async () => {
+    if (!confirm("让游戏重新导出全部物品（含中文名）？\n需要游戏正在运行且已装新版扩展命令 mod，通常几秒钟。")) return;
+    const b = $("giveDbRefresh");
+    b.disabled = true;
+    b.textContent = "刷新中…";
+    try {
+      const r = await apiLong(`/api/instances/${inst.name}/items/refresh`, {});
+      toast(`物品库已更新：${r.count} 项`);
+      await loadDB(true);
+    } catch (e) {
+      $("giveWarn").innerHTML = `<div class="warn-box">刷新失败：${esc(e.message)}</div>`;
+    } finally {
+      b.disabled = false;
+      b.textContent = "从游戏刷新物品库";
+    }
+  };
+
+  $("giveSearch").focus();
+  reloadPlayers();
+  loadDB(false);
 }
 
 /* 配置 */
@@ -821,12 +1156,13 @@ function initUE4SSBox(inst) {
     box.innerHTML = `
       <div>框架二进制：${bin.exists ? badge(true, `已就绪 ${fmtBytes(bin.size)}`) : badge(false, "未提供")}
         <span class="hint mono">${esc(bin.path || "")}</span></div>
-      <div class="mt">实例状态：${badge(st.installed, "libUE4SS.so")} ${badge(st.mod, "gspanel mod")} ${badge(st.queue, "命令队列")} ${badge(st.start_patched, "start.sh 已注入")}</div>
+      <div class="mt">实例状态：${badge(st.installed, "libUE4SS.so")} ${badge(st.mod, "gspanel mod" + (st.mod_version ? " " + st.mod_version : ""))} ${st.mod_stale ? badge(false, "有新版本 " + (st.mod_latest || "")) : ""} ${badge(st.queue, "命令队列")} ${badge(st.start_patched, "start.sh 已注入")}</div>
       <div class="form-actions">
         <button class="primary small" id="ue4ssInstall">${st.installed ? "重新安装 / 更新" : "安装"}</button>
         ${st.installed ? `<button class="small danger" id="ue4ssUninstall">卸载</button>` : ""}
       </div>
       <div class="hint">安装/卸载后需重启实例生效；「控制台」页会出现「扩展: 在线玩家 / 给物品… / 给经验…」按钮。
+      新版 mod（2026-09-13.2+）额外支持控制台「给物品」对话框的在线玩家下拉与「从游戏刷新物品库」（DT_ItemDataTable 全量 + 中文名）。
       二进制在「设置/环境」页上传、从本机路径导入或从 URL 下载。</div>`;
     const run = async (action) => {
       try {

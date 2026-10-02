@@ -5,7 +5,8 @@
 
 - 面板源码与二进制：clone 到任意目录皆可（本机在 `/home/ubuntu/gspanel/`，属主 `ubuntu`），状态跟随二进制所在目录
 - 面板服务：`gspanel.service`（开机自启，以普通用户运行，本机为 `ubuntu`）
-- 面板权限：systemd `User=ubuntu` + `AmbientCapabilities=CAP_CHOWN CAP_DAC_OVERRIDE`；
+- 面板权限：systemd `User=ubuntu` + `AmbientCapabilities=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER`
+  （FOWNER 用于对 games 属主文件 chmod，如安装扩展命令时复制 libUE4SS.so/start.sh）；
   写 unit、启停实例、装 32 位依赖经 `/usr/local/sbin/gspanel-priv`（sudoers 白名单），切 `games` 身份走 `sudo -u games`
 - 游戏实例服务：`gspanel-<实例名>.service`（独立 unit，崩溃自拉起、开机自启）
 - 访问：`http://100.64.0.3:8800`（仅 Tailscale 内网）或 `http://gspanel.tail.yyplab.site:8800`
@@ -210,8 +211,17 @@ curl -s -X POST localhost:8800/api/instances/palworld-1/command -H "$H" \
    实现。面板原生管理：「设置/环境 → Palworld 扩展命令」上传/导入/下载框架二进制，
    实例「设置 → 扩展命令」一键安装/卸载/更新（安装后重启生效），控制台页出现
    「扩展: 在线玩家/给物品/给经验」按钮（走文件队列，非 RCON）。
+   「给物品」是**物品选择对话框**：在线玩家下拉 + 全量物品搜索（游戏内中文名/内部 ID，2466 项）、
+   数量快捷档、最近使用、可「从游戏刷新物品库」；中文名来自面板内置基线
+   （`assets/palworld-items/palworld-zh.json`，从游戏 pak 的 `L10N/zh-Hans/.../DT_ItemNameText_Common` 离线提取，
+   工具 `tools/palworld-ue4ss/extract-items-zh.py`），刷新时用 mod 导出的 ID 与基线按 ID 合并。
    框架补丁与构建脚本在 `tools/palworld-ue4ss/`，运行时资产在 `assets/palworld-ue4ss/`（embed 进面板）；
    游戏更新后重新编译 `libUE4SS.so` 并在面板重新「安装」即可。
+9. **UE4SS 读 FText 会 abort 游戏**（本 build）：`FText::ToString` 走的
+   `UKismetTextLibrary:Conv_TextToString` native macro 里 `StaticFindObject` 找不到 UFunction
+   （path 式函数查找失效）→ throw → 在 libsteam_api 的 `__gxx_personality_v0` 上 unwind 失败直接 SIGABRT。
+   因此 mod **不要访问 FText/不确定存在的属性**（`DT_ItemDataTable` 行结构体也没有 Name/TypeA 等字段），
+   物品中文名改为面板侧离线提取；`FText::StaticSize_Private` 也未初始化（值为 -1），修复后才可能用 FText。
 
 ## 测试
 

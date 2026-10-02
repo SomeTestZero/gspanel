@@ -2,11 +2,16 @@
 
 > 状态（2026-09-13）：**已打通并在 `palworld-1` 生产实例上启用**。
 > UE4SS 在 Palworld 1.0.4 (buildid 25080279) 原生 Linux 服务端上完整初始化，
-> Lua mod 可访问 UE 对象；面板控制台页新增「扩展: 在线玩家 / 给物品 / 给经验」按钮。
+> Lua mod 可访问 UE 对象；面板控制台页「扩展: 在线玩家 / 给物品 / 给经验」按钮，
+> 其中「给物品」是**物品选择对话框**（在线玩家下拉 + 全量中文名搜索 + 数量快捷档）。
 >
 > 已实测：`FindAllOf` / `FindObject` / `GetFullName` / `ForEachUObject`
-> （154k 对象）/ `StaticFindObject` 正常；文件队列 `who`/`give`(离线玩家错误路径) 正常。
+> （154k 对象）/ `StaticFindObject` / `UDataTable:GetRowNames`+`FindRow`
+> （导出 2466 个物品 ID）/ 文件队列 `who`/`whojson`/`hello`/`items` 正常。
 > **未实测**：对在线玩家真正执行 `AddItem_ServerInternal`（等玩家上线后验证）。
+>
+> ⚠️ 本 build 的 UE4SS **FText 读取会 abort 游戏进程**（详见第 5 节），物品中文名
+> 改为面板侧从 pak 离线提取（`extract-items-zh.py`）。
 
 ## 1. 调研结论
 
@@ -86,7 +91,8 @@ sudo tools/palworld-ue4ss/uninstall-from-instance.sh /home/games/instances/palwo
   Wood
   100
   ```
-  或 `who`、`giveexp` + 参数。
+  或 `who`、`whojson`（在线玩家 JSON）、`hello`（mod 版本握手）、`items`（导出物品 ID 列表
+  `gspanel-mod/items.json`）、`giveexp` + 参数。
 - mod 每 500ms 轮询，处理后删 `cmd.txt` 并写 `res.txt`：
   ```
   OK|FAIL
@@ -99,10 +105,44 @@ sudo tools/palworld-ue4ss/uninstall-from-instance.sh /home/games/instances/palwo
   `AddItem_ServerInternal(itemId, count, false, 0.0, true)`（1.0 SDK 确认存在）。
   命中哪个接口写在返回消息里。
 
+### 物品库与中文名（面板侧离线提取）
+
+- 1.0.4 的 `DT_ItemDataTable` 行结构体 `PalStaticItemDataStruct` 是精简表：
+  **没有 Name/TypeA/TypeB/Rarity/MaxStackCount**（访问不存在的属性 → throw → abort）；
+  物品显示名在 `L10N/<lang>/Pal/DataTable/Text/DT_ItemNameText_Common`
+  （行结构 `PalLocalizedTextData`，键 `ITEM_NAME_<物品ID>_TextData`，值在 `TextData` FText 里）。
+- 面板内置基线 `assets/palworld-items/palworld-zh.json`（2466 项 ID+中文名）由
+  `tools/palworld-ue4ss/extract-items-zh.py` 从 `Pal-LinuxServer.pak` 离线提取：
+  ```bash
+  pip install repak
+  # 先让 mod 导出 ID：面板「给物品」对话框点「从游戏刷新物品库」，或手工写 cmd.txt 队列命令 items
+  python3 tools/palworld-ue4ss/extract-items-zh.py \
+      /home/games/instances/palworld-1/Pal/Content/Paks/Pal-LinuxServer.pak \
+      /home/games/instances/palworld-1/Pal/Binaries/Linux/gspanel-mod/items.json \
+      assets/palworld-items/palworld-zh.json
+  go build   # 重新 embed 进面板二进制
+  ```
+  名称回退链：zh-Hans → zh-Hant → en → 基础表 → 物品 ID（游戏未翻译项写的是
+  `zh-hans text` 这类占位串，会被过滤；约 556 个内部/未使用项最终显示 ID）。
+- 运行时刷新：`POST /items/refresh` 让 mod 导出 ID，面板按 ID 把内置中文名合并进
+  `data/items/palworld.json`；**游戏新增物品的中文名需要重跑离线脚本 + 重新编译面板**。
+
 ## 5. 注意事项 / 坑
 
 - **LD_PRELOAD 绝不能进 shell**：`start.sh` 里必须 `exec env LD_PRELOAD=... 游戏二进制`，
   否则 bash/PalServer.sh 会加载 UE4SS 并段错误（构造函数假定自己在 UE 进程里）。
+- **FText 不能读（本 build）**：`FText:ToString()` 走 `UKismetTextLibrary:Conv_TextToString`
+  的 native macro，里面按 path `StaticFindObject("/Script/Engine.KismetTextLibrary:Conv_TextToString")`
+  在本 build 返回 nil → `throw std::runtime_error` → unwind 到 libsteam_api 的
+  `__gxx_personality_v0` 直接 SIGABRT（任何 UE4SS 的 C++ 异常都会杀进程，`pcall` 兜不住）。
+  同一个原因，`FText::StaticSize_Private` 初始值是 -1 且没人设置，复制 FText 也会 throw。
+  想恢复 FText 能力需要改 libUE4SS（修 path 式 UFunction 查找 / 给 StaticSize 赋值）后重编译。
+- **不要访问不确定存在的属性**：1.0.4 的物品行结构体是精简表（无 Name/TypeA/...），
+  读过一次就 abort；mod 里只读文档确认存在的字段。
+- **回调式 API 有栈 bug**：`UDataTable:ForEachRow` / `UStruct:ForEachFunction` 会把
+  回调位取错（`lua_pushvalue(1)` 在 push 了额外值之后失效）→ Lua 报错 → abort；
+  `UStruct:ForEachProperty` 在简单结构体上能用，但仍属高风险，尽量用
+  `GetRowNames()` + `FindRow()`。
 - **mod 的 Lua 语法/加载期错误会直接 abort 整个游戏进程**（UE4SS 把 Lua 错误抛成 C++ 异常，
   而 libsteam_api 覆盖了 `__gxx_personality_v0`，unwind 失败 → SIGABRT，systemd 重启循环）。
   改完 mod 必须先 `luac5.4 -p main.lua` 校验再部署（`install-to-instance.sh` 已内置校验）。
@@ -120,14 +160,17 @@ sudo tools/palworld-ue4ss/uninstall-from-instance.sh /home/games/instances/palwo
 ```
 assets/palworld-ue4ss/               # 运行时资产（embed 进面板二进制，安装时下发）
 ├── layouts/{MemberVariableLayout,VTableLayout}.ini
-├── mod/scripts/main.lua             # 给物品/给经验/在线玩家 + cmd.txt/res.txt 文件队列
+├── mod/scripts/main.lua             # 给物品/给经验/在线玩家/物品表导出 + cmd.txt/res.txt 文件队列
 ├── UE4SS-settings.ini / mods.txt
+
+assets/palworld-items/palworld-zh.json  # 「给物品」内置物品库（2466 项 ID+中文名，embed 进面板）
 
 tools/palworld-ue4ss/                # 框架侧物料（不参与面板构建）
 ├── README.md                        # 本文件
 ├── patches/ue4ss-linux-palworld-1.0.4.patch   # 全部源码修复（指向 fork）
 ├── build-ue4ss.sh                   # 从 fork 源码编译带修复的 libUE4SS.so
 ├── install-to-instance.sh / uninstall-from-instance.sh
+├── extract-items-zh.py              # 从 pak 离线提取物品中文名，生成 assets/palworld-items/
 ├── test-ue4ss.sh                    # 硬链接副本安全试跑（新构建验证用）
 ├── patch-ue4ss-glibc.py / shim/     # （旧）预编译版 glibc 垫片，源码编译用不到
 └── mod/template-console-buttons.json

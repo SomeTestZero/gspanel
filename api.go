@@ -102,6 +102,47 @@ func modQueueDir(inst *Instance) string {
 
 var modCmdMu sync.Mutex
 
+// runModVerb 通过文件队列执行一条 mod 命令并等待结果。
+// 面板所有 mod 命令共用一个队列，必须串行（modCmdMu）。
+func (sv *Server) runModVerb(inst *Instance, verb string, args []string, timeout time.Duration) (bool, string, error) {
+	dir := modQueueDir(inst)
+	if err := mkdirForGames(dir); err != nil {
+		return false, "", err
+	}
+	modCmdMu.Lock()
+	defer modCmdMu.Unlock()
+	resPath := dir + "/res.txt"
+	_ = os.Remove(resPath)
+	content := verb + "\n"
+	if len(args) > 0 {
+		content += strings.Join(args, "\n") + "\n"
+	}
+	tmp := dir + "/cmd.txt.tmp"
+	if err := os.WriteFile(tmp, []byte(content), 0644); err != nil {
+		return false, "", err
+	}
+	if err := chownToGames(tmp); err != nil {
+		return false, "", err
+	}
+	if err := os.Rename(tmp, dir+"/cmd.txt"); err != nil {
+		return false, "", err
+	}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if data, err := os.ReadFile(resPath); err == nil && len(data) > 0 {
+			txt := strings.TrimSpace(string(data))
+			lines := strings.SplitN(txt, "\n", 2)
+			msg := ""
+			if len(lines) > 1 {
+				msg = strings.TrimSpace(lines[1])
+			}
+			return lines[0] == "OK", msg, nil
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return false, "", fmt.Errorf("mod 未在 %s 内响应（游戏是否在运行？）", timeout)
+}
+
 func (sv *Server) handleModCommand(w http.ResponseWriter, r *http.Request) {
 	inst := sv.getInstance(w, r)
 	if inst == nil {
@@ -119,7 +160,7 @@ func (sv *Server) handleModCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch req.Verb {
-	case "who", "give", "giveexp":
+	case "who", "give", "giveexp", "whojson", "hello":
 	default:
 		jsonError(w, http.StatusBadRequest, "不支持的命令: "+req.Verb)
 		return
@@ -130,44 +171,12 @@ func (sv *Server) handleModCommand(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	dir := modQueueDir(inst)
-	if err := mkdirForGames(dir); err != nil {
-		jsonError(w, http.StatusInternalServerError, err.Error())
+	ok, msg, err := sv.runModVerb(inst, req.Verb, req.Args, 8*time.Second)
+	if err != nil {
+		jsonError(w, http.StatusGatewayTimeout, err.Error())
 		return
 	}
-	modCmdMu.Lock()
-	defer modCmdMu.Unlock()
-	resPath := dir + "/res.txt"
-	_ = os.Remove(resPath)
-	content := req.Verb + "\n" + strings.Join(req.Args, "\n") + "\n"
-	tmp := dir + "/cmd.txt.tmp"
-	if err := os.WriteFile(tmp, []byte(content), 0644); err != nil {
-		jsonError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if err := chownToGames(tmp); err != nil {
-		jsonError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	if err := os.Rename(tmp, dir+"/cmd.txt"); err != nil {
-		jsonError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	deadline := time.Now().Add(8 * time.Second)
-	for time.Now().Before(deadline) {
-		if data, err := os.ReadFile(resPath); err == nil && len(data) > 0 {
-			txt := strings.TrimSpace(string(data))
-			lines := strings.SplitN(txt, "\n", 2)
-			msg := ""
-			if len(lines) > 1 {
-				msg = strings.TrimSpace(lines[1])
-			}
-			jsonOK(w, map[string]any{"ok": lines[0] == "OK", "message": msg})
-			return
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
-	jsonError(w, http.StatusGatewayTimeout, "mod 未在 8 秒内响应（游戏是否在运行？）")
+	jsonOK(w, map[string]any{"ok": ok, "message": msg})
 }
 
 func (sv *Server) registerRoutes(mux *http.ServeMux) {
@@ -215,6 +224,9 @@ func (sv *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/instances/{name}/console/stream", sv.auth(sv.handleConsoleStream))
 	mux.HandleFunc("POST /api/instances/{name}/command", sv.auth(sv.handleCommand))
 	mux.HandleFunc("POST /api/instances/{name}/mod-command", sv.auth(sv.handleModCommand))
+	mux.HandleFunc("GET /api/instances/{name}/items", sv.auth(sv.handleItemsList))
+	mux.HandleFunc("POST /api/instances/{name}/items/refresh", sv.auth(sv.handleItemsRefresh))
+	mux.HandleFunc("GET /api/instances/{name}/players", sv.auth(sv.handleModPlayers))
 	mux.HandleFunc("POST /api/instances/{name}/ue4ss", sv.auth(sv.handleInstanceUE4SS))
 	mux.HandleFunc("GET /api/ue4ss", sv.auth(sv.handleUE4SSInfo))
 	mux.HandleFunc("POST /api/ue4ss/upload", sv.auth(sv.handleUE4SSUpload))
